@@ -10,7 +10,7 @@
 .modal.hidden{display:none}
 </style>
 </head>
-<body><main class="app"><header class="between"><div><div class="muted" style="font-size:11px;letter-spacing:.14em">PERSONAL STRENGTH JOURNAL</div><h1>Rep<span style="color:var(--accent)">book</span></h1></div><button class="btn" onclick="settings()">⚙</button></header><div id="page"></div></main>
+<body><main class="app"><div id="page"></div></main>
 <nav class="nav"><button data-tab="workout" class="active" onclick="go('workout')">＋<br>Workout</button><button data-tab="history" onclick="go('history')">↺<br>History</button><button data-tab="exercises" onclick="go('exercises')">▦<br>Exercises</button><button data-tab="progress" onclick="go('progress')">▥<br>Progress</button></nav>
 <div id="modal" class="modal hidden"><div id="dialog" class="dialog"></div></div>
 <script>
@@ -23,7 +23,7 @@ function go(t){tab=t;document.querySelectorAll('.nav button').forEach(b=>b.class
 function modal(x){$('dialog').innerHTML=x;$('modal').classList.remove('hidden')}function closeM(){$('modal').classList.add('hidden')}
 document.getElementById('modal').onclick=e=>{if(e.target.id==='modal')closeM()};
 function render(){$('page').innerHTML=tab==='workout'?workout():tab==='history'?history():tab==='exercises'?exercises():progress()}
-function workout(){if(s.active)return active();return `<div class="card"><h2>Ready when you are</h2><p class="muted">Log a workout or start from a saved routine.</p><button class="btn primary full" onclick="start()">＋ Start empty workout</button></div><div class="between"><h2>Your routines</h2><button class="btn" onclick="routine()">＋ New</button></div>${s.routines.length?s.routines.map(r=>`<div class="card between"><div><b>${esc(r.name)}</b><div class="muted">${r.exerciseIds.length} exercises</div></div><button class="btn" onclick="start('${r.id}')">Start</button></div>`).join(''):'<div class="card muted">No routines yet.</div>'}`}
+function workout(){if(s.active)return active();return `<div class="between"><h2>Your routines</h2><div class="row"><button class="btn" onclick="routine()">＋ New</button><button class="btn" aria-label="Settings" onclick="settings()">⚙</button></div></div>${s.routines.length?s.routines.map(r=>`<div class="card between"><div><b>${esc(r.name)}</b><div class="muted">${r.exerciseIds.length} exercises</div></div><button class="btn" onclick="start('${r.id}')">Start</button></div>`).join(''):'<div class="card muted">No routines yet.</div>'}`}
 function routine(){modal(`<h2>New routine</h2><input id="rn" placeholder="Routine name"><div style="margin:12px 0">${s.exercises.map(e=>`<label style="display:block;padding:6px"><input style="width:auto" type="checkbox" value="${e.id}" class="rx"> ${esc(e.name)}</label>`).join('')}</div><button class="btn primary full" onclick="saveRoutine()">Save routine</button>`)}
 function saveRoutine(){const name=$('rn').value.trim();if(!name)return;const exerciseIds=[...document.querySelectorAll('.rx:checked')].map(x=>x.value);s.routines.push({id:uid(),name,exerciseIds});save();closeM();render()}
 function start(id){const r=s.routines.find(x=>x.id===id);s.active={id:uid(),name:r?.name||'Workout',start:new Date().toISOString(),exercises:(r?.exerciseIds||[]).map(exerciseId=>({exerciseId,sets:[{id:uid(),weight:'',reps:'',done:false}]}))};save();render()}
