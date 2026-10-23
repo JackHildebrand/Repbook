@@ -19,7 +19,7 @@ const names=['Bench Press (Barbell)','Chest Press (Machine)','Chest Fly (Machine
 const seed=()=>{const exercises=names.map(name=>({id:uid(),name})),id=n=>exercises.find(e=>e.name===n)?.id;return {unit:'lbs',exercises,routines:[{id:uid(),name:'Upper',exerciseIds:['Chest Press (Machine)','Lat Pulldown (Cable)','Chest Fly (Machine)','Seated Row (Machine)','Lateral Raise (Machine)','Preacher Curl (Machine)','Triceps Pushdown (Cable)'].map(id).filter(Boolean)},{id:uid(),name:'Lower',exerciseIds:['Leg Extension (Machine)','Seated Leg Curl (Machine)','Leg Press (Machine)','Calf Extension (Machine)','Crunch (Machine)'].map(id).filter(Boolean)}],workouts:[],active:null}};
 let s;try{s=JSON.parse(localStorage.getItem(KEY))||seed()}catch{s=seed()}let tab='workout';const $=id=>document.getElementById(id);
 const save=()=>localStorage.setItem(KEY,JSON.stringify(s)),ex=id=>s.exercises.find(x=>x.id===id)||{name:'Unknown'},sets=w=>w.exercises.reduce((n,e)=>n+e.sets.length,0),vol=w=>w.exercises.reduce((n,e)=>n+e.sets.reduce((a,x)=>a+(+x.weight||0)*(+x.reps||0),0),0);
-function go(t){tab=t;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render()}
+function go(t){window.scrollTo({top:0,left:0,behavior:'instant'});tab=t;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render()}
 function modal(x){$('dialog').innerHTML=x;$('modal').classList.remove('hidden')}function closeM(){$('modal').classList.add('hidden')}
 document.getElementById('modal').onclick=e=>{if(e.target.id==='modal')closeM()};
 function render(){$('page').innerHTML=tab==='workout'?workout():progress()+history()}
