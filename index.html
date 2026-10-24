@@ -179,5 +179,13 @@ function selectFieldValue(event){const el=event.target;if(!el.matches('input[typ
 document.addEventListener('focusin',event=>{const el=event.target;requestAnimationFrame(()=>{if(document.activeElement===el)selectFieldValue(event)})});
 document.addEventListener('click',selectFieldValue);
 
+
+let tabSwipeGesture=null;
+const tabSwipeSurface=document.querySelector('.app');
+tabSwipeSurface.addEventListener('touchstart',event=>{const blocked=event.target.closest('.swipe-shell,input,textarea,select,button,a,label,.dialog,svg[role="img"]');if(event.touches.length!==1||blocked||!$('modal').classList.contains('hidden')){tabSwipeGesture=null;return}const t=event.touches[0];tabSwipeGesture={x:t.clientX,y:t.clientY,time:Date.now(),axis:null}},{passive:true});
+tabSwipeSurface.addEventListener('touchmove',event=>{const p=tabSwipeGesture;if(!p||event.touches.length!==1){tabSwipeGesture=null;return}const t=event.touches[0],dx=t.clientX-p.x,dy=t.clientY-p.y;if(!p.axis&&Math.max(Math.abs(dx),Math.abs(dy))>12)p.axis=Math.abs(dx)>Math.abs(dy)*1.7?'x':'y';if(p.axis==='x'&&event.cancelable)event.preventDefault()},{passive:false});
+tabSwipeSurface.addEventListener('touchend',event=>{const p=tabSwipeGesture;tabSwipeGesture=null;if(!p||!event.changedTouches.length||p.axis==='y'||Date.now()-p.time>1000)return;const t=event.changedTouches[0],dx=t.clientX-p.x,dy=t.clientY-p.y;if(Math.abs(dx)<75||Math.abs(dx)<Math.abs(dy)*1.7)return;const target=dx<0?'history':'workout';if(target===tab)return;if(event.cancelable)event.preventDefault();setTapBlockedUntil=Date.now()+350;go(target);if(!matchMedia('(prefers-reduced-motion: reduce)').matches)$('page').animate([{opacity:.5,transform:'translateX('+(dx<0?16:-16)+'px)'},{opacity:1,transform:'translateX(0)'}],{duration:180,easing:'ease-out'})},{passive:false});
+tabSwipeSurface.addEventListener('touchcancel',()=>{tabSwipeGesture=null},{passive:true});
+
 if('serviceWorker'in navigator)addEventListener('load',()=>navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{}));render();
 </script></body></html>
