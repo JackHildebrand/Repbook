@@ -5,7 +5,74 @@ import WidgetKit
 
 @main
 struct RepbookWidgets: WidgetBundle {
-    var body: some Widget { WorkoutLiveActivity(); RoutineLauncher() }
+    var body: some Widget { WorkoutLiveActivity(); ScheduledRoutineWidget(); RoutineLauncher() }
+}
+
+struct ScheduledRoutineEntry: TimelineEntry {
+    let date: Date
+    let configuration: WeeklyRoutineConfiguration
+}
+
+struct ScheduledRoutineProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> ScheduledRoutineEntry {
+        ScheduledRoutineEntry(date: .now, configuration: WeeklyRoutineConfiguration())
+    }
+    func snapshot(for configuration: WeeklyRoutineConfiguration, in context: Context) async -> ScheduledRoutineEntry {
+        ScheduledRoutineEntry(date: .now, configuration: configuration)
+    }
+    func timeline(for configuration: WeeklyRoutineConfiguration, in context: Context) async -> Timeline<ScheduledRoutineEntry> {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: Date())
+        let entries = (0..<8).compactMap { offset -> ScheduledRoutineEntry? in
+            guard let date = calendar.date(byAdding: .day, value: offset, to: start) else { return nil }
+            return ScheduledRoutineEntry(date: date, configuration: configuration)
+        }
+        return Timeline(entries: entries, policy: .atEnd)
+    }
+}
+
+struct ScheduledRoutineWidget: Widget {
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(kind: "RepbookScheduledRoutine", intent: WeeklyRoutineConfiguration.self, provider: ScheduledRoutineProvider()) { entry in
+            ScheduledRoutineView(entry: entry)
+        }
+        .configurationDisplayName("Scheduled workout")
+        .description("Set a routine for each day. Tap the arrow to start today's workout and Live Activity in the background.")
+        .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+
+struct ScheduledRoutineView: View {
+    let entry: ScheduledRoutineEntry
+    private var name: String { entry.configuration.routine(on: entry.date) }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(entry.date.formatted(.dateTime.weekday(.wide)))
+                .font(.system(size: 17)).foregroundStyle(Color.gray)
+            Text(name.isEmpty ? "Rest day" : name)
+                .font(.system(size: 23, weight: .bold)).foregroundStyle(Color.black)
+                .lineLimit(2).minimumScaleFactor(0.7)
+            Spacer(minLength: 4)
+            HStack(alignment: .bottom) {
+                if !name.isEmpty {
+                    Button(intent: StartScheduledWorkoutIntent(schedule: entry.configuration.encodedSchedule)) {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 25, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(width: 48, height: 48)
+                            .background(Color.blue, in: Circle())
+                    }.buttonStyle(.plain).accessibilityLabel("Start \(name)")
+                } else {
+                    Image(systemName: "moon.zzz").font(.title2).foregroundStyle(.gray)
+                }
+                Spacer()
+                Image(systemName: "dumbbell.fill").font(.title3).foregroundStyle(.black)
+                    .accessibilityLabel("Repbook")
+            }
+        }
+        .padding(3)
+        .containerBackground(.white, for: .widget)
+    }
 }
 
 struct WorkoutLiveActivity: Widget {

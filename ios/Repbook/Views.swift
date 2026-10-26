@@ -356,7 +356,7 @@ struct SettingsView: View {
             }
             Section("Lock Screen & Home Screen") {
                 Text("Start a workout to show a Live Activity. Use its buttons to adjust weight or reps and log the current set.")
-                Text("Add the Repbook widget from your Home Screen to open your routines quickly.").font(.caption).foregroundStyle(.secondary)
+                Text("Add the Scheduled workout widget to your Home Screen. Hold it and choose Edit Widget to enter the exact routine name for each day. Leave a day blank for rest. Tap the blue arrow to start today's routine and Live Activity without opening Repbook.").font(.caption).foregroundStyle(.secondary)
             }
         }.navigationTitle("Settings")
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in

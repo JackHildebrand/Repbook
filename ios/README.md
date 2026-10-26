@@ -16,6 +16,12 @@ SwiftUI app targeting iOS 17+, with ActivityKit Lock Screen/Dynamic Island contr
 
 ## Build on a Mac
 
+### Scheduled workout widget (0.4)
+
+Add **Scheduled workout** from the Repbook widget gallery. Hold the widget and select **Edit Widget**. Enter the exact saved routine name for each weekday; leave a field empty for a rest day. The schedule is stored in the widget configuration, so each widget can have its own week without App Group entitlements. Routine renames require updating the corresponding widget fields.
+
+The blue arrow uses a `LiveActivityIntent` with `openAppWhenRun = false`. It starts and saves the scheduled routine in the app process in the background, then awaits the Live Activity request. Existing active workouts are resumed rather than overwritten. The action resolves today's weekday at tap time, and the widget supplies midnight entries for the coming week. Live Activities must be enabled; unsupported or failed requests return an error instead of claiming success. Background launch and Lock Screen behavior must still be tested on a physical iPhone.
+
 1. Install Xcode and XcodeGen (`brew install xcodegen`).
 2. In this directory run `swift test`, then `xcodegen generate`.
 3. Open `Repbook.xcodeproj`, choose your signing team for **both** targets and unique bundle IDs if necessary, then Run on your iPhone.
