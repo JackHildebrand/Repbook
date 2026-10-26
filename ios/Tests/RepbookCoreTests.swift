@@ -31,6 +31,12 @@ final class RepbookCoreTests: XCTestCase {
         var data = RepbookData.seed(); data.routines[0].exercises[0].exerciseID = "missing"
         XCTAssertThrowsError(try data.validate())
     }
+    func testImportedHevyHistoryWithNullEnd() throws {
+        let json = #"{"unit":"lbs","exercises":[{"id":"x","name":"Row"}],"routines":[],"workouts":[{"id":"w","name":"Upper","start":"2026-10-23T10:05:00.000Z","end":null,"source":"hevy","exercises":[{"exerciseId":"x","sets":[{"weight":"105","reps":"9","done":true}]}]}],"active":null}"#
+        let data = try BackupImporter.decode(Data(json.utf8))
+        XCTAssertEqual(data.workouts[0].completedSets, 1)
+        XCTAssertNil(data.workouts[0].ended)
+    }
     func testUnitConversionIncludesHistoryAndActiveWorkout() {
         var data = RepbookData.seed(); data.routines[0].exercises[0].sets[0].weight = 100
         data.active = data.starting(data.routines[0]); data.workouts = [data.active!]

@@ -165,8 +165,10 @@ enum BackupImporter {
                 guard let id = item["exerciseId"] as? String, let sets = item["sets"] as? [[String: Any]] else { throw BackupError.invalid }
                 return SessionExercise(exerciseID: id, sets: sets.map { set($0) })
             }
+            let ended: Date?
+            if let value = raw["end"], !(value is NSNull) { ended = try date(value) } else { ended = nil }
             return Session(id: raw["id"] as? String ?? UUID().uuidString, name: name,
-                           started: try date(raw["start"]), ended: try raw["end"].map { try date($0) }, exercises: exercises)
+                           started: try date(raw["start"]), ended: ended, exercises: exercises)
         }
         let exercises = try catalog.map { raw -> Exercise in
             guard let id = raw["id"] as? String, let name = raw["name"] as? String else { throw BackupError.invalid }
