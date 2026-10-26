@@ -8,10 +8,10 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $selected) {
             NavigationStack { WorkoutHome() }.tabItem { Label("Workout", systemImage: "dumbbell.fill") }.tag(0)
-            NavigationStack { HistoryView() }.tabItem { Label("History", systemImage: "clock.arrow.circlepath") }.tag(1)
-            NavigationStack { ProgressionView() }.tabItem { Label("Progression", systemImage: "chart.xyaxis.line") }.tag(2)
+            NavigationStack { ProgressionView() }.tabItem { Label("Progression", systemImage: "chart.xyaxis.line") }.tag(1)
+            NavigationStack { HistoryView() }.tabItem { Label("History", systemImage: "clock.arrow.circlepath") }.tag(2)
         }
-        .onOpenURL { _ in selected = 0 }
+        .onOpenURL { _ in selected = 0; store.currentSetNavigation = UUID() }
         .alert("Repbook", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("OK") { store.error = nil }
         } message: { Text(store.error ?? "") }
@@ -68,6 +68,7 @@ struct ActiveWorkoutView: View {
     @FocusState private var editingValue: Bool
     var body: some View {
         if let session = store.data.active {
+            ScrollViewReader { scroll in
             List {
                 Section {
                     Text(session.name).font(.title3.bold())
@@ -84,25 +85,6 @@ struct ActiveWorkoutView: View {
                     Text("\(session.completedSets) sets logged · \(session.volume.formatted(.number.precision(.fractionLength(0)))) \(store.data.unit) volume")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Section("Live Activity") {
-                    HStack {
-                        Label(store.liveActivityStatus.label,
-                              systemImage: store.liveActivityStatus == .active ? "checkmark.circle.fill" : "iphone")
-                            .foregroundStyle(store.liveActivityStatus == .active ? .green : .secondary)
-                        Spacer()
-                        if store.liveActivityStatus != .active {
-                            Button("Show") { store.showLiveActivity() }
-                                .buttonStyle(.borderless)
-                        }
-                    }
-                    if store.liveActivityStatus == .disabled {
-                        Text("Turn on Live Activities in Settings → Apps → Repbook → Live Activities, then tap Show.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    if case .failed(let message) = store.liveActivityStatus {
-                        Text(message).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
                 ForEach(Array(session.exercises.enumerated()), id: \.element.id) { ei, exercise in
                     Section {
                         HStack {
@@ -115,7 +97,7 @@ struct ActiveWorkoutView: View {
                             HStack(spacing: 10) {
                                 let prs = store.personalRecords(exerciseID: exercise.exerciseID, set: set)
                                 VStack(spacing: 1) {
-                                    if prs.weight || prs.volume { Text("🏅").font(.caption2).accessibilityLabel("Personal record") }
+                                    if set.done && (prs.weight || prs.volume) { Text("🏅").font(.caption2).accessibilityLabel("Personal record") }
                                     Text(set.warmup ? "W" : "\(exercise.sets.prefix(si + 1).filter { !$0.warmup }.count)")
                                         .font(.subheadline.bold()).foregroundStyle(set.warmup ? .secondary : .primary)
                                 }.frame(width: 32)
@@ -131,7 +113,7 @@ struct ActiveWorkoutView: View {
                                     Image(systemName: set.done ? "checkmark.circle.fill" : "circle").font(.title2)
                                         .foregroundStyle(set.done ? .green : .secondary)
                                 }.buttonStyle(.borderless).accessibilityLabel(set.done ? "Unlog set \(si + 1)" : "Log set \(si + 1)")
-                            }.listRowBackground(set.done ? Color.green.opacity(0.12) : Color(uiColor: .secondarySystemGroupedBackground))
+                            }.id(set.id).listRowBackground(set.done ? Color.green.opacity(0.12) : Color(uiColor: .secondarySystemGroupedBackground))
                             .swipeActions { Button("Delete", role: .destructive) { store.change { $0.active?.exercises[ei].sets.remove(at: si) } } }
                         }
                         Button("Add set", systemImage: "plus") {
@@ -178,8 +160,20 @@ struct ActiveWorkoutView: View {
                 }
             }
             .sheet(isPresented: $settings) { SettingsSheet() }
-            .task { store.showLiveActivity() }
+            .task {
+                store.showLiveActivity()
+                scrollToCurrent(scroll)
+            }
+            .onChange(of: store.currentSetNavigation) { _, _ in scrollToCurrent(scroll) }
+            }
         }
+    }
+    private func scrollToCurrent(_ scroll: ScrollViewProxy) {
+        guard let session = store.data.active else { return }
+        let id = session.nextSet.map { session.exercises[$0.exercise].sets[$0.set].id }
+            ?? session.exercises.last?.sets.last?.id
+        guard let id else { return }
+        DispatchQueue.main.async { scroll.scrollTo(id, anchor: .center) }
     }
     private func setBinding<T>(_ ei: Int, _ si: Int, _ key: WritableKeyPath<WorkoutSet, T>) -> Binding<T> {
         let exercise = store.data.active!.exercises[ei]

@@ -82,7 +82,7 @@ struct WorkoutLiveActivity: Widget {
                 HStack {
                     Label(context.attributes.name, systemImage: "dumbbell.fill").font(.caption.bold())
                     Spacer()
-                    Text(context.attributes.started, style: .timer).monospacedDigit().font(.caption)
+                    ActivityTopTimer(context: context)
                 }.foregroundStyle(.blue)
                 HStack(alignment: .firstTextBaseline) {
                     Text(context.state.exercise).font(.headline).lineLimit(2)
@@ -94,19 +94,15 @@ struct WorkoutLiveActivity: Widget {
                 } else {
                     SetControls(context: context)
                 }
-                HStack {
-                    Spacer()
-                    if let end = context.state.restUntil {
-                        Text("Rest")
-                        Text(timerInterval: min(context.attributes.started, end)...end, countsDown: true).monospacedDigit().frame(width: 55)
-                    }
-                }.font(.caption).foregroundStyle(.secondary)
+                if context.state.loggedPR == true {
+                    Text("🏅 PR logged").font(.caption.bold()).foregroundStyle(.blue)
+                }
             }.padding().activityBackgroundTint(Color.black.opacity(0.9)).activitySystemActionForegroundColor(.blue)
                 .widgetURL(URL(string: "repbook://workout"))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) { Label(context.attributes.name, systemImage: "dumbbell.fill").font(.caption).foregroundStyle(.blue) }
-                DynamicIslandExpandedRegion(.trailing) { Text(context.attributes.started, style: .timer).font(.caption).monospacedDigit() }
+                DynamicIslandExpandedRegion(.trailing) { ActivityTopTimer(context: context) }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
@@ -116,6 +112,7 @@ struct WorkoutLiveActivity: Widget {
                         }
                         if !context.state.finished { SetControls(context: context) }
                         else { Text("Open Repbook to finish").font(.caption) }
+                        if context.state.loggedPR == true { Text("🏅 PR logged").font(.caption.bold()).foregroundStyle(.blue) }
                     }
                 }
             } compactLeading: {
@@ -148,6 +145,8 @@ struct SetControls: View {
         HStack(spacing: 2) {
             adjust("−", weight: minusWeight, reps: minusReps)
             Text(value).font(.caption.bold()).monospacedDigit().frame(minWidth: 46)
+                .contentTransition(.identity)
+                .animation(.easeOut(duration: 0.1), value: value)
             adjust("+", weight: plusWeight, reps: plusReps)
         }.frame(maxWidth: .infinity)
     }
@@ -155,6 +154,21 @@ struct SetControls: View {
         Button(intent: AdjustSetIntent(sessionID: context.attributes.sessionID, setID: state.setID, weightDelta: weight, repDelta: reps)) {
             Text(label).font(.title3.bold()).frame(width: 32, height: 38)
         }.buttonStyle(.plain).contentShape(Rectangle()).tint(.blue)
+    }
+}
+
+struct ActivityTopTimer: View {
+    let context: ActivityViewContext<WorkoutAttributes>
+    var body: some View {
+        HStack(spacing: 4) {
+            if let end = context.state.restUntil {
+                Text("Rest")
+                Text(timerInterval: min(context.attributes.started, end)...end, countsDown: true)
+                    .frame(width: 48)
+            } else {
+                Text(context.attributes.started, style: .timer)
+            }
+        }.font(.caption).monospacedDigit()
     }
 }
 

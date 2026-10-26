@@ -41,6 +41,7 @@ struct Session: Codable, Identifiable, Equatable {
     var ended: Date?
     var exercises: [SessionExercise]
     var restUntil: Date?
+    var lastLoggedSetID: String?
     var completedSets: Int { exercises.flatMap(\.sets).filter(\.done).count }
     var volume: Double { exercises.flatMap(\.sets).filter { $0.done && !$0.warmup }.reduce(0) { $0 + $1.weight * Double($1.reps) } }
     var nextSet: (exercise: Int, set: Int)? {

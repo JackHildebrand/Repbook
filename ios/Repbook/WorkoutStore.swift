@@ -1,6 +1,7 @@
 import ActivityKit
 import Combine
 import Foundation
+import UIKit
 
 @MainActor
 final class WorkoutStore: ObservableObject {
@@ -25,6 +26,7 @@ final class WorkoutStore: ObservableObject {
     static let shared = WorkoutStore()
     @Published private(set) var data: RepbookData
     @Published var error: String?
+    @Published var currentSetNavigation = UUID()
     @Published private(set) var liveActivityStatus: LiveActivityStatus = .idle
     private let url: URL
     private var activityTask: Task<Void, Never>?
@@ -127,8 +129,14 @@ final class WorkoutStore: ObservableObject {
 
     func toggleSet(exercise ei: Int, set si: Int) {
         guard let active = data.active, active.exercises.indices.contains(ei), active.exercises[ei].sets.indices.contains(si) else { return }
+        let target = active.exercises[ei].sets[si]
+        let records = personalRecords(exerciseID: active.exercises[ei].exerciseID, set: target)
         change {
             $0.active!.exercises[ei].sets[si].done.toggle()
+            let done = $0.active!.exercises[ei].sets[si].done
+            $0.active!.exercises[ei].sets[si].weightPR = done && records.weight
+            $0.active!.exercises[ei].sets[si].volumePR = done && records.volume
+            $0.active!.lastLoggedSetID = done ? target.id : nil
             $0.active!.restUntil = $0.active!.exercises[ei].sets[si].done && $0.restSeconds > 0 ? Date().addingTimeInterval(Double($0.restSeconds)) : nil
         }
     }
@@ -147,6 +155,13 @@ final class WorkoutStore: ObservableObject {
         guard let session = data.active, session.id == sessionID, let next = session.nextSet,
               session.exercises[next.exercise].sets[next.set].id == setID else { return }
         toggleSet(exercise: next.exercise, set: next.set)
+        if let logged = data.active?.exercises[next.exercise].sets[next.set], logged.done {
+            if logged.weightPR == true || logged.volumePR == true {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            } else {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.5)
+            }
+        }
         await activityTask?.value
     }
 
@@ -193,7 +208,8 @@ final class WorkoutStore: ObservableObject {
             exercise: next.map { name(session.exercises[$0.exercise].exerciseID) } ?? "All sets logged",
             setID: set?.id ?? "", label: next.map { "\(set?.warmup == true ? "Warmup" : "Set") \($0.set + 1)" } ?? "Finish in Repbook",
             progress: progress, weight: set?.weight ?? 0, reps: set?.reps ?? 0, unit: data.unit,
-            restUntil: session.restUntil, finished: next == nil)
+            restUntil: session.restUntil, finished: next == nil,
+            loggedPR: session.exercises.flatMap(\.sets).first(where: { $0.id == session.lastLoggedSetID }).map { $0.done && ($0.weightPR == true || $0.volumePR == true) })
         let content = ActivityContent(state: state, staleDate: nil)
         for activity in Activity<WorkoutAttributes>.activities where activity.attributes.sessionID != session.id {
             await activity.end(nil, dismissalPolicy: .immediate)
