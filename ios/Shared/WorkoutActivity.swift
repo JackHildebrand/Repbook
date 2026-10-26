@@ -7,10 +7,10 @@ struct WorkoutAttributes: ActivityAttributes {
         var exercise: String
         var setID: String
         var label: String
+        var progress: String
         var weight: Double
         var reps: Int
         var unit: String
-        var completed: Int
         var restUntil: Date?
         var finished: Bool
     }

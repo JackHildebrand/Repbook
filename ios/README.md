@@ -7,10 +7,12 @@ SwiftUI app targeting iOS 17+, with ActivityKit Lock Screen/Dynamic Island contr
 - Upper/Lower routines, exercise search/custom exercises, editable working sets, 0–2 warmup sets (default 2).
 - Reorder mode collapses exercises to names and uses native list drag handles; ordinary scrolling does not initiate a reorder. This first version uses an explicit Reorder button rather than the web app's long-press gesture.
 - Active workout, previous working weight/reps, log/unlog, add/delete sets, add exercises, automatic rest countdown, finish/discard, local history.
-- Atomic on-device JSON persistence, native backup export/import, and migration from the latest web app JSON export including active workouts and exercise IDs. Web-specific notes/PR metadata are not yet represented; retain the original export.
+- Atomic on-device JSON persistence, native backup export/import, and migration from the latest web app JSON export including active workouts, exercise IDs, and PR medals. Retain the original export as a backup.
 - Local Live Activities with current exercise/set, weight/reps adjustment buttons and log button. Requests identify both session and set so repeated/stale Log taps cannot log the following set. LiveActivityIntent executes in the host app; no shared App Group container is required for these controls.
 - Home Screen launcher widget. Workout summaries/charts and routine-specific interactive widgets are future work.
 - Unit changes convert all saved weights rather than relabeling them.
+- Version 0.3 uses the blue theme, shows current-set progress in Live Activities, restores PR medals, moves Settings into the Workout toolbar, and improves numeric editing and keyboard dismissal.
+- Updates keep the same `com.jackhildebrand.repbook` bundle identifier and Application Support data file. Running a new build over the installed app preserves data; deleting the app removes local data, so export a backup before deletion.
 
 ## Build on a Mac
 
@@ -36,4 +38,4 @@ In the currently installed web app, use Settings/Data → Export JSON. Keep the 
 - Add the Home Screen launcher; test large text and VoiceOver.
 - Verify installer refresh retains data and includes the extension before relying on automatic renewals.
 
-This project starts the native replacement; it does not yet have full web feature parity. Hevy CSV import, charts/PRs, exact long-press reorder behavior, rest notifications, app icon polish, and automated sideload refresh are not implemented. Apple-platform compilation is performed by CI; device installation and behavior require an iPhone test.
+This project starts the native replacement; it does not yet have full web feature parity. Hevy CSV import, charts, exact long-press reorder behavior, rest notifications, app icon polish, and automated sideload refresh are not implemented. Apple-platform compilation is performed by CI; device installation and behavior require an iPhone test.

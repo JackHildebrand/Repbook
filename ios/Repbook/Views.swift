@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct RootView: View {
@@ -8,7 +9,6 @@ struct RootView: View {
         TabView(selection: $selected) {
             NavigationStack { WorkoutHome() }.tabItem { Label("Workout", systemImage: "dumbbell.fill") }.tag(0)
             NavigationStack { HistoryView() }.tabItem { Label("History", systemImage: "clock.arrow.circlepath") }.tag(1)
-            NavigationStack { SettingsView() }.tabItem { Label("Settings", systemImage: "gearshape") }.tag(2)
         }
         .onOpenURL { _ in selected = 0 }
         .alert("Repbook", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
@@ -20,17 +20,12 @@ struct RootView: View {
 struct WorkoutHome: View {
     @EnvironmentObject private var store: WorkoutStore
     @State private var editor: Routine?
+    @State private var settings = false
     var body: some View {
         Group {
             if store.data.active != nil { ActiveWorkoutView() }
             else {
                 List {
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Ready when you are.").font(.title2.bold())
-                            Text("Choose a routine and make the next set count.").foregroundStyle(.secondary)
-                        }.padding(.vertical, 12)
-                    }
                     Section("Your routines") {
                         ForEach(store.data.routines) { routine in
                             VStack(alignment: .leading, spacing: 12) {
@@ -48,10 +43,18 @@ struct WorkoutHome: View {
                         .onDelete { offsets in store.change { $0.routines.remove(atOffsets: offsets) } }
                     }
                 }.navigationTitle("Repbook")
-                .toolbar { Button { editor = Routine(name: "New routine") } label: { Image(systemName: "plus") }.accessibilityLabel("New routine") }
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { settings = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Settings")
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { editor = Routine(name: "New routine") } label: { Image(systemName: "plus") }.accessibilityLabel("New routine")
+                    }
+                }
             }
         }
         .sheet(item: $editor) { RoutineEditor(draft: $0) }
+        .sheet(isPresented: $settings) { SettingsSheet() }
     }
 }
 
@@ -60,15 +63,13 @@ struct ActiveWorkoutView: View {
     @State private var discard = false
     @State private var finish = false
     @State private var addingExercise = false
+    @State private var settings = false
+    @FocusState private var editingValue: Bool
     var body: some View {
         if let session = store.data.active {
             List {
                 Section {
-                    HStack {
-                        Label("Elapsed", systemImage: "timer")
-                        Spacer()
-                        Text(session.started, style: .timer).monospacedDigit()
-                    }
+                    Text(session.name).font(.title3.bold())
                     if let end = session.restUntil {
                         TimelineView(.periodic(from: .now, by: 1)) { context in
                             HStack {
@@ -76,7 +77,7 @@ struct ActiveWorkoutView: View {
                                 Spacer()
                                 if end > context.date { Text(timerInterval: context.date...end, countsDown: true).monospacedDigit() }
                                 Button("Skip") { store.change { $0.active?.restUntil = nil } }.buttonStyle(.borderless)
-                            }.foregroundStyle(.orange)
+                            }.foregroundStyle(.blue)
                         }
                     }
                     Text("\(session.completedSets) sets logged · \(session.volume.formatted(.number.precision(.fractionLength(0)))) \(store.data.unit) volume")
@@ -111,13 +112,19 @@ struct ActiveWorkoutView: View {
                         }.font(.caption).foregroundStyle(.secondary)
                         ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { si, set in
                             HStack(spacing: 10) {
-                                Text(set.warmup ? "W" : "\(exercise.sets.prefix(si + 1).filter { !$0.warmup }.count)")
-                                    .font(.subheadline.bold()).foregroundStyle(set.warmup ? .secondary : .primary).frame(width: 32)
+                                let prs = store.personalRecords(exerciseID: exercise.exerciseID, set: set)
+                                VStack(spacing: 1) {
+                                    if prs.weight || prs.volume { Text("🏅").font(.caption2).accessibilityLabel("Personal record") }
+                                    Text(set.warmup ? "W" : "\(exercise.sets.prefix(si + 1).filter { !$0.warmup }.count)")
+                                        .font(.subheadline.bold()).foregroundStyle(set.warmup ? .secondary : .primary)
+                                }.frame(width: 32)
                                 TextField("Weight", value: setBinding(ei, si, \.weight), format: .number)
                                     .keyboardType(.decimalPad).multilineTextAlignment(.center).textFieldStyle(.roundedBorder)
+                                    .focused($editingValue).selectAllOnTap()
                                     .accessibilityLabel("\(store.name(exercise.exerciseID)) set \(si + 1) weight")
                                 TextField("Reps", value: setBinding(ei, si, \.reps), format: .number)
                                     .keyboardType(.numberPad).multilineTextAlignment(.center).textFieldStyle(.roundedBorder)
+                                    .focused($editingValue).selectAllOnTap()
                                     .accessibilityLabel("\(store.name(exercise.exerciseID)) set \(si + 1) reps")
                                 Button { store.toggleSet(exercise: ei, set: si) } label: {
                                     Image(systemName: set.done ? "checkmark.circle.fill" : "circle").font(.title2)
@@ -139,8 +146,24 @@ struct ActiveWorkoutView: View {
                 Section { Button("Discard workout", role: .destructive) { discard = true } }
             }
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle(session.name).navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Finish") { finish = true }.fontWeight(.bold) }
+            .background(KeyboardDismissTap())
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { settings = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Settings")
+                }
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "timer")
+                        Text(session.started, style: .timer).monospacedDigit().fontWeight(.semibold)
+                    }.font(.subheadline)
+                }
+                ToolbarItem(placement: .topBarTrailing) { Button("Finish") { finish = true }.fontWeight(.bold) }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { editingValue = false }
+                }
+            }
             .confirmationDialog("Finish and save this workout?", isPresented: $finish, titleVisibility: .visible) {
                 Button("Save workout") { store.finish() }
             } message: { Text("Only logged sets will be saved.") }
@@ -153,6 +176,7 @@ struct ActiveWorkoutView: View {
                     addingExercise = false
                 }
             }
+            .sheet(isPresented: $settings) { SettingsSheet() }
             .task { store.showLiveActivity() }
         }
     }
@@ -277,6 +301,9 @@ struct HistoryView: View {
                                 ForEach(exercise.sets) { set in
                                     HStack {
                                         Text(set.warmup ? "Warmup" : "Set").foregroundStyle(.secondary)
+                                        if set.weightPR == true || set.volumePR == true {
+                                            Text("🏅").accessibilityLabel("Personal record")
+                                        }
                                         Spacer()
                                         Text("\(set.weight.formatted()) \(store.data.unit) × \(set.reps)")
                                     }
@@ -351,5 +378,66 @@ struct SettingsView: View {
         .fileExporter(isPresented: $exporting, document: document, contentType: .json, defaultFilename: "repbook-native-backup") { result in
             if case .failure(let error) = result { store.error = error.localizedDescription }
         }
+    }
+}
+
+struct SettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack {
+            SettingsView()
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+private extension View {
+    func selectAllOnTap() -> some View {
+        simultaneousGesture(TapGesture().onEnded {
+            DispatchQueue.main.async {
+                UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil)
+            }
+        })
+    }
+}
+
+private struct KeyboardDismissTap: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        DispatchQueue.main.async { context.coordinator.install(from: view) }
+        return view
+    }
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async { context.coordinator.install(from: uiView) }
+    }
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) { coordinator.remove() }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        weak var window: UIWindow?
+        var recognizer: UITapGestureRecognizer?
+
+        func install(from view: UIView) {
+            guard recognizer == nil, let window = view.window else { return }
+            let recognizer = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
+            recognizer.cancelsTouchesInView = false
+            recognizer.delegate = self
+            window.addGestureRecognizer(recognizer)
+            self.window = window
+            self.recognizer = recognizer
+        }
+        func remove() {
+            if let recognizer { window?.removeGestureRecognizer(recognizer) }
+            recognizer = nil
+        }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            var view: UIView? = touch.view
+            while let current = view {
+                if current is UITextField { return false }
+                view = current.superview
+            }
+            return true
+        }
+        @objc private func dismissKeyboard() { window?.endEditing(true) }
     }
 }

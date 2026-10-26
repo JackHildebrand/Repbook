@@ -11,6 +11,8 @@ struct WorkoutSet: Codable, Identifiable, Equatable {
     var reps: Int = 8
     var warmup = false
     var done = false
+    var weightPR: Bool?
+    var volumePR: Bool?
 }
 
 struct RoutineExercise: Codable, Identifiable, Equatable {
@@ -157,7 +159,9 @@ enum BackupImporter {
             return WorkoutSet(weight: number(weightText.isEmpty ? raw["previousWeight"] : raw["weight"]),
                               reps: max(1, Int(number(repText.isEmpty ? raw["previousReps"] : raw["reps"]))),
                               warmup: (raw["type"] as? String ?? raw["set_type"] as? String) == "warmup",
-                              done: !template && (raw["done"] as? Bool ?? false))
+                              done: !template && (raw["done"] as? Bool ?? false),
+                              weightPR: raw["pr"] as? Bool,
+                              volumePR: raw["volumePR"] as? Bool)
         }
         func session(_ raw: [String: Any]) throws -> Session {
             guard let name = raw["name"] as? String, let entries = raw["exercises"] as? [[String: Any]] else { throw BackupError.invalid }

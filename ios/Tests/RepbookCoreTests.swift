@@ -58,4 +58,29 @@ final class RepbookCoreTests: XCTestCase {
         XCTAssertNotEqual(session.nextSet?.set, first?.set)
         XCTAssertEqual(session.completedSets, 1)
     }
+
+    func testPreviousNativeBuildDataStillDecodes() throws {
+        let original = RepbookData.seed()
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        let bytes = try encoder.encode(original)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        if var routines = object["routines"] as? [[String: Any]] {
+            for routineIndex in routines.indices {
+                guard var exercises = routines[routineIndex]["exercises"] as? [[String: Any]] else { continue }
+                for exerciseIndex in exercises.indices {
+                    guard var sets = exercises[exerciseIndex]["sets"] as? [[String: Any]] else { continue }
+                    for setIndex in sets.indices {
+                        sets[setIndex].removeValue(forKey: "weightPR")
+                        sets[setIndex].removeValue(forKey: "volumePR")
+                    }
+                    exercises[exerciseIndex]["sets"] = sets
+                }
+                routines[routineIndex]["exercises"] = exercises
+            }
+            object["routines"] = routines
+        }
+        let restored = try BackupImporter.decode(JSONSerialization.data(withJSONObject: object))
+        XCTAssertEqual(restored.routines.count, original.routines.count)
+        XCTAssertEqual(restored.exercises.count, original.exercises.count)
+    }
 }

@@ -74,11 +74,36 @@ final class WorkoutStore: ObservableObject {
 
     func finish() {
         guard var session = data.active else { return }
+        for ei in session.exercises.indices {
+            let exerciseID = session.exercises[ei].exerciseID
+            let previous = historicalSets(for: exerciseID)
+            let previousWeight = previous.map(\.weight).max()
+            let previousVolume = previous.map { $0.weight * Double($0.reps) }.max()
+            for si in session.exercises[ei].sets.indices where session.exercises[ei].sets[si].done && !session.exercises[ei].sets[si].warmup {
+                let set = session.exercises[ei].sets[si]
+                session.exercises[ei].sets[si].weightPR = previousWeight.map { set.weight > $0 } ?? true
+                session.exercises[ei].sets[si].volumePR = previousVolume.map { set.weight * Double(set.reps) > $0 } ?? true
+            }
+        }
         session.ended = Date(); session.restUntil = nil
         session.exercises = session.exercises.map { item in var item = item; item.sets.removeAll { !$0.done }; return item }
         session.exercises.removeAll { $0.sets.isEmpty }
         guard session.completedSets > 0 else { error = "Log at least one set before finishing."; return }
         change { $0.workouts.insert(session, at: 0); $0.active = nil }
+    }
+
+    private func historicalSets(for exerciseID: String) -> [WorkoutSet] {
+        data.workouts.flatMap { workout in
+            workout.exercises.filter { $0.exerciseID == exerciseID }.flatMap(\.sets)
+        }.filter { $0.done && !$0.warmup }
+    }
+
+    func personalRecords(exerciseID: String, set: WorkoutSet) -> (weight: Bool, volume: Bool) {
+        guard !set.warmup, set.weight > 0, set.reps > 0 else { return (false, false) }
+        let previous = historicalSets(for: exerciseID)
+        let weight = previous.map(\.weight).max().map { set.weight > $0 } ?? true
+        let volume = previous.map { $0.weight * Double($0.reps) }.max().map { set.weight * Double(set.reps) > $0 } ?? true
+        return (weight, volume)
     }
 
     func toggleSet(exercise ei: Int, set si: Int) {
@@ -132,10 +157,23 @@ final class WorkoutStore: ObservableObject {
         }
         let next = session.nextSet
         let set = next.map { session.exercises[$0.exercise].sets[$0.set] }
+        let progress: String
+        if let next, let set {
+            let sets = session.exercises[next.exercise].sets
+            if set.warmup {
+                let warmups = sets.filter(\.warmup)
+                let position = sets.prefix(next.set + 1).filter(\.warmup).count
+                progress = "W\(position)/\(warmups.count)"
+            } else {
+                let working = sets.filter { !$0.warmup }
+                let position = sets.prefix(next.set + 1).filter { !$0.warmup }.count
+                progress = "\(position)/\(working.count)"
+            }
+        } else { progress = "" }
         let state = WorkoutAttributes.ContentState(
             exercise: next.map { name(session.exercises[$0.exercise].exerciseID) } ?? "All sets logged",
             setID: set?.id ?? "", label: next.map { "\(set?.warmup == true ? "Warmup" : "Set") \($0.set + 1)" } ?? "Finish in Repbook",
-            weight: set?.weight ?? 0, reps: set?.reps ?? 0, unit: data.unit, completed: session.completedSets,
+            progress: progress, weight: set?.weight ?? 0, reps: set?.reps ?? 0, unit: data.unit,
             restUntil: session.restUntil, finished: next == nil)
         let content = ActivityContent(state: state, staleDate: nil)
         for activity in Activity<WorkoutAttributes>.activities where activity.attributes.sessionID != session.id {
