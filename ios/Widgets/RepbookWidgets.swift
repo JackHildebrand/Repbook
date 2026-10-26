@@ -184,7 +184,7 @@ struct SetControls: View {
             adjust("−", weight: minusWeight, reps: minusReps)
             Text(value).font(.caption.bold()).monospacedDigit().frame(minWidth: 46)
                 .contentTransition(.identity)
-                .animation(.easeOut(duration: 0.1), value: value)
+                .animation(nil, value: value)
             adjust("+", weight: plusWeight, reps: plusReps)
         }.frame(maxWidth: .infinity)
     }
@@ -198,13 +198,18 @@ struct SetControls: View {
 struct ActivityTopTimer: View {
     let context: ActivityViewContext<WorkoutAttributes>
     var body: some View {
-        HStack(spacing: 4) {
-            if let end = context.state.restUntil {
-                Text("Rest")
-                Text(timerInterval: min(context.attributes.started, end)...end, countsDown: true)
-                    .frame(width: 48)
-            } else {
+        VStack(alignment: .trailing, spacing: 3) {
+            HStack(spacing: 4) {
+                Text("Elapsed")
                 Text(context.attributes.started, style: .timer)
+                    .frame(width: 64, alignment: .trailing)
+            }
+            if let end = context.state.restUntil {
+                HStack(spacing: 4) {
+                    Text("Rest")
+                    Text(timerInterval: min(context.attributes.started, end)...end, countsDown: true)
+                        .frame(width: 64, alignment: .trailing)
+                }
             }
         }.font(.caption).monospacedDigit()
     }
