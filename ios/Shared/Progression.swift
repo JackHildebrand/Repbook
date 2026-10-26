@@ -45,7 +45,7 @@ extension RepbookData {
     }
 
     var weightRecords: [(exercise: Exercise, weight: Double)] {
-        exercises.compactMap { exercise in
+        exercises.compactMap { exercise -> (exercise: Exercise, weight: Double)? in
             let sets = workouts.flatMap(\.exercises).filter { $0.exerciseID == exercise.id }.flatMap(\.sets)
                 .filter { $0.done && !$0.warmup }
             guard let best = sets.map(\.weight).max(), best > 0 else { return nil }
