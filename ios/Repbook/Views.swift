@@ -137,8 +137,16 @@ struct ActiveWorkoutView: View {
         }
     }
     private func setBinding<T>(_ ei: Int, _ si: Int, _ key: WritableKeyPath<WorkoutSet, T>) -> Binding<T> {
-        Binding(get: { store.data.active!.exercises[ei].sets[si][keyPath: key] },
-                set: { value in store.change { $0.active!.exercises[ei].sets[si][keyPath: key] = value } })
+        let exercise = store.data.active!.exercises[ei]
+        let set = exercise.sets[si]
+        return Binding(get: {
+            store.data.active?.exercises.first(where: { $0.id == exercise.id })?.sets.first(where: { $0.id == set.id })?[keyPath: key] ?? set[keyPath: key]
+        }, set: { value in
+            guard let session = store.data.active,
+                  let index = session.exercises.firstIndex(where: { $0.id == exercise.id }),
+                  let setIndex = session.exercises[index].sets.firstIndex(where: { $0.id == set.id }) else { return }
+            store.change { $0.active!.exercises[index].sets[setIndex][keyPath: key] = value }
+        })
     }
 }
 
