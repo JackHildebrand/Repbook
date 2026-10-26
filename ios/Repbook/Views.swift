@@ -9,6 +9,7 @@ struct RootView: View {
         TabView(selection: $selected) {
             NavigationStack { WorkoutHome() }.tabItem { Label("Workout", systemImage: "dumbbell.fill") }.tag(0)
             NavigationStack { HistoryView() }.tabItem { Label("History", systemImage: "clock.arrow.circlepath") }.tag(1)
+            NavigationStack { ProgressionView() }.tabItem { Label("Progression", systemImage: "chart.xyaxis.line") }.tag(2)
         }
         .onOpenURL { _ in selected = 0 }
         .alert("Repbook", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {

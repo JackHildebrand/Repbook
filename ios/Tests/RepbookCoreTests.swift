@@ -2,6 +2,22 @@ import XCTest
 @testable import RepbookCore
 
 final class RepbookCoreTests: XCTestCase {
+    func testProgressionExcludesWarmupsAndAggregatesWorkingSets() throws {
+        let date = Date()
+        let exercise = Exercise(name: "Row")
+        let session = Session(name: "Upper", started: date, exercises: [SessionExercise(exerciseID: exercise.id, sets: [
+            WorkoutSet(weight: 500, reps: 10, warmup: true, done: true),
+            WorkoutSet(weight: 100, reps: 8, done: true),
+            WorkoutSet(weight: 110, reps: 6, done: true),
+            WorkoutSet(weight: 999, reps: 10, done: false)
+        ])])
+        let data = RepbookData(exercises: [exercise], routines: [], workouts: [session])
+        XCTAssertEqual(data.progression(months: nil, metric: .weight, now: date).first?.points.first?.value, 110)
+        XCTAssertEqual(data.progression(months: nil, metric: .reps, now: date).first?.points.first?.value, 14)
+        XCTAssertEqual(data.progression(months: nil, metric: .volume, now: date).first?.points.first?.value, 1460)
+        XCTAssertEqual(data.weightRecords.first?.weight, 110)
+        XCTAssertTrue(data.progression(months: 1, metric: .weight, now: date.addingTimeInterval(100 * 86400)).isEmpty)
+    }
     func testWarmupsAndHistory() throws {
         var data = RepbookData.seed()
         data.routines[0].exercises[0].sets = [WorkoutSet(weight: 100, reps: 8)]
