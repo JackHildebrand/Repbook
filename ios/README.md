@@ -1,4 +1,4 @@
-# Repbook for iPhone — initial native version
+# Repbook for iPhone
 
 SwiftUI app targeting iOS 17+, with ActivityKit Lock Screen/Dynamic Island controls and a WidgetKit Home Screen launcher. No server, subscription, push notifications, or Apple login is used by the app.
 
@@ -9,16 +9,18 @@ SwiftUI app targeting iOS 17+, with ActivityKit Lock Screen/Dynamic Island contr
 - Active workout, previous working weight/reps, log/unlog, add/delete sets, add exercises, automatic rest countdown, finish/discard, local history.
 - Atomic on-device JSON persistence, native backup export/import, and migration from the latest web app JSON export including active workouts, exercise IDs, and PR medals. Retain the original export as a backup.
 - Local Live Activities with current exercise/set, weight/reps adjustment buttons and log button. Requests identify both session and set so repeated/stale Log taps cannot log the following set. LiveActivityIntent executes in the host app; no shared App Group container is required for these controls.
-- Home Screen launcher widget. Workout summaries/charts and routine-specific interactive widgets are future work.
+- Configurable scheduled-routine widgets for the Home Screen and circular Lock Screen slot. Tapping their control starts today's routine and Live Activity without opening the app.
 - Unit changes convert all saved weights rather than relabeling them.
 - Version 0.3 uses the blue theme, shows current-set progress in Live Activities, restores PR medals, moves Settings into the Workout toolbar, and improves numeric editing and keyboard dismissal.
 - Updates keep the same `com.jackhildebrand.repbook` bundle identifier and Application Support data file. Running a new build over the installed app preserves data; deleting the app removes local data, so export a backup before deletion.
 
 ## Build on a Mac
 
-### Scheduled workout widget (0.4)
+### Scheduled workout widgets (0.7)
 
 Add **Scheduled workout** from the Repbook widget gallery. Hold the widget and select **Edit Widget**. Enter the exact saved routine name for each weekday; leave a field empty for a rest day. The schedule is stored in the widget configuration, so each widget can have its own week without App Group entitlements. Routine renames require updating the corresponding widget fields.
+
+For the Lock Screen, customize the Lock Screen, tap the widget area, and add **Scheduled workout — Lock Screen**. It uses the same weekday configuration and displays only a barbell; tapping the barbell runs the same start action as the Home Screen widget.
 
 The blue arrow uses a `LiveActivityIntent` with `openAppWhenRun = false`. It starts and saves the scheduled routine in the app process in the background, then awaits the Live Activity request. Existing active workouts are resumed rather than overwritten. The action resolves today's weekday at tap time, and the widget supplies midnight entries for the coming week. Live Activities must be enabled; unsupported or failed requests return an error instead of claiming success. Background launch and Lock Screen behavior must still be tested on a physical iPhone.
 
@@ -41,7 +43,7 @@ In the currently installed web app, use Settings/Data → Export JSON. Keep the 
 - Adjust weight/reps and log while app is backgrounded; verify the same values in-app after unlocking. Rapidly double-tap Log; verify only one set was logged.
 - Finish/discard clears the Live Activity. Disable Live Activities and verify normal logging still works.
 - Force quit/reopen, restart phone, and confirm workout recovery. Live Activity restart may require foregrounding.
-- Add the Home Screen launcher; test large text and VoiceOver.
+- Add both scheduled workout widgets; configure the same week and verify their controls start the expected routine. Test large text and VoiceOver.
 - Verify installer refresh retains data and includes the extension before relying on automatic renewals.
 
-This project starts the native replacement; it does not yet have full web feature parity. Hevy CSV import, charts, exact long-press reorder behavior, rest notifications, app icon polish, and automated sideload refresh are not implemented. Apple-platform compilation is performed by CI; device installation and behavior require an iPhone test.
+This project starts the native replacement; it does not yet have full web feature parity. Hevy CSV import, exact long-press reorder behavior, rest notifications, app icon polish, and automated sideload refresh are not implemented. Apple-platform compilation is performed by CI; device installation and behavior require an iPhone test.

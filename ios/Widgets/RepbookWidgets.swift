@@ -5,7 +5,12 @@ import WidgetKit
 
 @main
 struct RepbookWidgets: WidgetBundle {
-    var body: some Widget { WorkoutLiveActivity(); ScheduledRoutineWidget(); RoutineLauncher() }
+    var body: some Widget {
+        WorkoutLiveActivity()
+        ScheduledRoutineWidget()
+        ScheduledRoutineLockScreenWidget()
+        RoutineLauncher()
+    }
 }
 
 struct ScheduledRoutineEntry: TimelineEntry {
@@ -72,6 +77,39 @@ struct ScheduledRoutineView: View {
         }
         .padding(3)
         .containerBackground(.white, for: .widget)
+    }
+}
+
+struct ScheduledRoutineLockScreenWidget: Widget {
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(
+            kind: "RepbookScheduledRoutineLockScreen",
+            intent: WeeklyRoutineConfiguration.self,
+            provider: ScheduledRoutineProvider()
+        ) { entry in
+            ScheduledRoutineLockScreenView(entry: entry)
+        }
+        .configurationDisplayName("Scheduled workout — Lock Screen")
+        .description("Tap the barbell to start today's scheduled routine and Live Activity.")
+        .supportedFamilies([.accessoryCircular])
+    }
+}
+
+struct ScheduledRoutineLockScreenView: View {
+    let entry: ScheduledRoutineEntry
+    private var name: String { entry.configuration.routine(on: entry.date) }
+
+    var body: some View {
+        Button(intent: StartScheduledWorkoutIntent(schedule: entry.configuration.encodedSchedule)) {
+            Image(systemName: "dumbbell.fill")
+                .font(.system(size: 24, weight: .semibold))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .widgetAccentable()
+        .accessibilityLabel(name.isEmpty ? "Rest day" : "Start \(name)")
+        .containerBackground(for: .widget) { AccessoryWidgetBackground() }
     }
 }
 

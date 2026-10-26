@@ -24,8 +24,8 @@ targets:
         INFOPLIST_KEY_NSSupportsLiveActivities: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        MARKETING_VERSION: '0.6.0'
-        CURRENT_PROJECT_VERSION: '6'
+        MARKETING_VERSION: '0.7.0'
+        CURRENT_PROJECT_VERSION: '7'
     info:
       path: Repbook/Info.plist
       properties:
@@ -47,8 +47,8 @@ targets:
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) WIDGET_EXTENSION'
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Repbook
-        MARKETING_VERSION: '0.6.0'
-        CURRENT_PROJECT_VERSION: '6'
+        MARKETING_VERSION: '0.7.0'
+        CURRENT_PROJECT_VERSION: '7'
         SKIP_INSTALL: YES
         APPLICATION_EXTENSION_API_ONLY: YES
     info:
