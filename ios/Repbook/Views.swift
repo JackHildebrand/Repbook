@@ -82,6 +82,25 @@ struct ActiveWorkoutView: View {
                     Text("\(session.completedSets) sets logged · \(session.volume.formatted(.number.precision(.fractionLength(0)))) \(store.data.unit) volume")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                Section("Live Activity") {
+                    HStack {
+                        Label(store.liveActivityStatus.label,
+                              systemImage: store.liveActivityStatus == .active ? "checkmark.circle.fill" : "iphone")
+                            .foregroundStyle(store.liveActivityStatus == .active ? .green : .secondary)
+                        Spacer()
+                        if store.liveActivityStatus != .active {
+                            Button("Show") { store.showLiveActivity() }
+                                .buttonStyle(.borderless)
+                        }
+                    }
+                    if store.liveActivityStatus == .disabled {
+                        Text("Turn on Live Activities in Settings → Apps → Repbook → Live Activities, then tap Show.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if case .failed(let message) = store.liveActivityStatus {
+                        Text(message).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 ForEach(Array(session.exercises.enumerated()), id: \.element.id) { ei, exercise in
                     Section {
                         HStack {
@@ -134,6 +153,7 @@ struct ActiveWorkoutView: View {
                     addingExercise = false
                 }
             }
+            .task { store.showLiveActivity() }
         }
     }
     private func setBinding<T>(_ ei: Int, _ si: Int, _ key: WritableKeyPath<WorkoutSet, T>) -> Binding<T> {

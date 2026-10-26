@@ -49,4 +49,13 @@ final class RepbookCoreTests: XCTestCase {
         let data = RepbookData.seed(); let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
         XCTAssertEqual(try BackupImporter.decode(encoder.encode(data)), data)
     }
+
+    func testLoggingAdvancesToNextSet() {
+        var session = RepbookData.seed().starting(RepbookData.seed().routines[0])
+        let first = session.nextSet
+        XCTAssertNotNil(first)
+        session.exercises[first!.exercise].sets[first!.set].done = true
+        XCTAssertNotEqual(session.nextSet?.set, first?.set)
+        XCTAssertEqual(session.completedSets, 1)
+    }
 }

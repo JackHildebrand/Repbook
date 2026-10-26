@@ -4,9 +4,28 @@ import Foundation
 
 @MainActor
 final class WorkoutStore: ObservableObject {
+    enum LiveActivityStatus: Equatable {
+        case idle
+        case starting
+        case active
+        case disabled
+        case failed(String)
+
+        var label: String {
+            switch self {
+            case .idle: "Not showing"
+            case .starting: "Starting…"
+            case .active: "Showing on Lock Screen"
+            case .disabled: "Disabled in iPhone Settings"
+            case .failed: "Could not start"
+            }
+        }
+    }
+
     static let shared = WorkoutStore()
     @Published private(set) var data: RepbookData
     @Published var error: String?
+    @Published private(set) var liveActivityStatus: LiveActivityStatus = .idle
     private let url: URL
     private var activityTask: Task<Void, Never>?
     private var storageHealthy = true
@@ -46,6 +65,11 @@ final class WorkoutStore: ObservableObject {
     func start(_ routine: Routine) {
         guard data.active == nil else { return }
         change { $0.active = $0.starting(routine) }
+    }
+
+    func showLiveActivity() {
+        guard data.active != nil else { return }
+        scheduleActivityUpdate()
     }
 
     func finish() {
@@ -103,6 +127,7 @@ final class WorkoutStore: ObservableObject {
     private func syncActivity() async {
         guard let session = data.active else {
             for activity in Activity<WorkoutAttributes>.activities { await activity.end(nil, dismissalPolicy: .immediate) }
+            liveActivityStatus = .idle
             return
         }
         let next = session.nextSet
@@ -118,10 +143,18 @@ final class WorkoutStore: ObservableObject {
         }
         if let activity = Activity<WorkoutAttributes>.activities.first(where: { $0.attributes.sessionID == session.id }) {
             await activity.update(content)
+            liveActivityStatus = .active
         } else if ActivityAuthorizationInfo().areActivitiesEnabled {
+            liveActivityStatus = .starting
             do {
                 _ = try Activity.request(attributes: WorkoutAttributes(sessionID: session.id, name: session.name, started: session.started), content: content, pushType: nil)
-            } catch { self.error = "Workout saved. Live Activity could not start: \(error.localizedDescription)" }
+                liveActivityStatus = .active
+            } catch {
+                liveActivityStatus = .failed(error.localizedDescription)
+                self.error = "Workout saved. Live Activity could not start: \(error.localizedDescription)"
+            }
+        } else {
+            liveActivityStatus = .disabled
         }
     }
 }

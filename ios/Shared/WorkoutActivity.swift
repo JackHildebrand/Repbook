@@ -21,6 +21,8 @@ struct WorkoutAttributes: ActivityAttributes {
 
 struct AdjustSetIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Adjust current set"
+    static var description = IntentDescription("Changes the weight or reps for Repbook's current set.")
+    static var isDiscoverable: Bool = false
     @Parameter(title: "Session") var sessionID: String
     @Parameter(title: "Set") var setID: String
     @Parameter(title: "Weight change") var weightDelta: Double
@@ -39,6 +41,8 @@ struct AdjustSetIntent: LiveActivityIntent {
 
 struct LogSetIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Log current set"
+    static var description = IntentDescription("Logs Repbook's current set and advances to the next set.")
+    static var isDiscoverable: Bool = false
     @Parameter(title: "Session") var sessionID: String
     @Parameter(title: "Set") var setID: String
     init() {}
