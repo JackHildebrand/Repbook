@@ -21,7 +21,11 @@ final class WorkoutFlowTests: XCTestCase {
         app.launch()
         app.buttons["Resume workout"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "1 /")).firstMatch.waitForExistence(timeout: 5))
-        app.buttons["Workout controls"].tap()
+        let controls = app.buttons["workout-controls"]
+        XCTAssertTrue(controls.waitForExistence(timeout: 5))
+        let tappable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: controls)
+        XCTAssertEqual(XCTWaiter.wait(for: [tappable], timeout: 5), .completed)
+        controls.tap()
         app.buttons["Finish workout"].tap()
         XCTAssertTrue(app.staticTexts["Workout complete"].waitForExistence(timeout: 10))
         app.buttons["Done"].tap()

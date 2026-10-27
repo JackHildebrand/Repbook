@@ -36,7 +36,7 @@ struct ActiveWorkoutView: View {
                             }.buttonStyle(.bordered).clipShape(Capsule())
                         }.padding(20)
                     }.background(Color(uiColor: .systemBackground))
-                    .navigationTitle("Your workout").navigationBarTitleDisplayMode(.large)
+                    .navigationTitle("Your workout").navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button(action: onMinimize) { Image(systemName: "chevron.down").frame(width: 44, height: 44) }.accessibilityLabel("Minimize workout")
@@ -47,14 +47,14 @@ struct ActiveWorkoutView: View {
                                 Text(session.started, style: .timer).font(.subheadline.weight(.semibold)).monospacedDigit()
                             }
                         }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Menu {
-                                Button("Finish workout", systemImage: "checkmark.circle") { store.finish() }
-                                Button("Edit current session", systemImage: "pencil") { editingSession = true }
-                                Button("Workout settings", systemImage: "gearshape") { settings = true }
-                                Button("Discard workout", systemImage: "trash", role: .destructive) { discard = true }
-                            } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44) }.accessibilityLabel("Workout controls")
-                        }
+                    }
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        HStack {
+                            Text("Your workout").font(.title2.weight(.semibold))
+                            Spacer()
+                            workoutControls
+                        }.padding(.horizontal, 20).padding(.vertical, 8)
+                            .background(Color(uiColor: .systemBackground))
                     }
                     .onAppear { focusCurrent(session, scroll) }
                     .onChange(of: store.currentSetNavigation) { _, _ in focusCurrent(session, scroll) }
@@ -76,6 +76,21 @@ struct ActiveWorkoutView: View {
             }
         }
         .sheet(item: $numeric) { target in NumericEntrySheet(target: target) }
+    }
+
+    private var workoutControls: some View {
+        Menu {
+            Button("Finish workout", systemImage: "checkmark.circle") { store.finish() }
+            Button("Edit current session", systemImage: "pencil") { editingSession = true }
+            Button("Workout settings", systemImage: "gearshape") { settings = true }
+            Button("Discard workout", systemImage: "trash", role: .destructive) { discard = true }
+        } label: {
+            Image(systemName: "ellipsis").font(.headline).frame(width: 52, height: 52)
+                .background(Color(uiColor: .tertiarySystemFill), in: Circle())
+                .contentShape(Circle())
+        }
+        .accessibilityLabel("Workout controls")
+        .accessibilityIdentifier("workout-controls")
     }
 
     private func focusCurrent(_ session: Session, _ scroll: ScrollViewProxy) {
