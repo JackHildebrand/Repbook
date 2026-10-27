@@ -266,7 +266,7 @@ struct RestTimerCard: View {
                             Button("+15 sec") { store.adjustRest(15) }.frame(maxWidth: .infinity, minHeight: 48).background(Color(uiColor: .tertiarySystemFill), in: Capsule())
                         }.font(.subheadline.weight(.semibold)).buttonStyle(.plain)
                     }
-                }.onChange(of: end > context.date) { wasResting, resting in if wasResting && !resting { store.feedback() } }
+                }
             }.repbookCard()
         }
     }

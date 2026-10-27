@@ -66,6 +66,7 @@ struct WorkoutAttributes: ActivityAttributes {
         var restUntil: Date?
         var finished: Bool
         var loggedPR: Bool?
+        var restComplete: Bool?
     }
     var sessionID: String
     var name: String

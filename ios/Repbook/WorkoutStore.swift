@@ -33,8 +33,11 @@ final class WorkoutStore: ObservableObject {
     private let url: URL
     private var activityTask: Task<Void, Never>?
     private var storageHealthy = true
+    private var restTask: Task<Void, Never>?
+    private var restKey: String?
 
     private init() {
+        UserDefaults.standard.register(defaults: ["restNotifications": true])
         let testing = ProcessInfo.processInfo.arguments.contains("-repbook-ui-testing")
         url = URL.applicationSupportDirectory.appending(path: testing ? "RepbookUITests/data.json" : "Repbook/data.json")
         if testing && ProcessInfo.processInfo.arguments.contains("-repbook-reset-test-data") { try? FileManager.default.removeItem(at: url) }
@@ -82,6 +85,11 @@ final class WorkoutStore: ObservableObject {
     func start(_ routine: Routine) {
         guard data.active == nil else { return }
         change { $0.active = $0.starting(routine) }
+        if UIApplication.shared.applicationState == .active && !ProcessInfo.processInfo.arguments.contains("-repbook-ui-testing") && UserDefaults.standard.bool(forKey: "restNotifications") {
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] _, _ in
+                Task { @MainActor in self?.updateRestNotification() }
+            }
+        }
     }
 
     func showLiveActivity() {
@@ -219,15 +227,40 @@ final class WorkoutStore: ObservableObject {
         return try encoder.encode(data)
     }
 
-    func scheduleActivityUpdate() {
-        let previous = activityTask
-        activityTask = Task { [weak self] in
-            await previous?.value
-            await self?.syncActivity()
+    private func scheduleRestCompletion() {
+        guard let session = data.active, let end = session.restUntil else {
+            restTask?.cancel(); restTask = nil; restKey = nil; return
+        }
+        let key = session.id + String(end.timeIntervalSince1970)
+        guard restKey != key else { return }
+        restTask?.cancel(); restKey = key
+        let delay = end.timeIntervalSinceNow
+        guard delay > 0 else { return }
+        restTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: UInt64(min(delay, 86400) * 1_000_000_000)) } catch { return }
+            guard let self, !Task.isCancelled, self.restKey == key, self.data.active?.id == session.id,
+                  self.data.active?.restUntil == end else { return }
+            // Suspension may delay this task. Refresh overdue state without replaying an old alert.
+            let recent = Date().timeIntervalSince(end) < 10
+            if recent && UIApplication.shared.applicationState == .active { self.feedback() }
+            self.enqueueActivityUpdate(restAlert: recent)
         }
     }
 
-    private func syncActivity() async {
+    func scheduleActivityUpdate() {
+        scheduleRestCompletion()
+        enqueueActivityUpdate(restAlert: false)
+    }
+
+    private func enqueueActivityUpdate(restAlert: Bool) {
+        let previous = activityTask
+        activityTask = Task { [weak self] in
+            await previous?.value
+            await self?.syncActivity(restAlert: restAlert)
+        }
+    }
+
+    private func syncActivity(restAlert: Bool) async {
         // UI tests exercise persistence and navigation independently of simulator ActivityKit authorization.
         if ProcessInfo.processInfo.arguments.contains("-repbook-ui-testing") { liveActivityStatus = .disabled; return }
         guard let session = data.active else {
@@ -257,12 +290,16 @@ final class WorkoutStore: ObservableObject {
             progress: progress, weight: set?.weight ?? 0, reps: set?.reps ?? 0, unit: data.unit,
             restUntil: session.restUntil, finished: next == nil,
             loggedPR: session.exercises.flatMap(\.sets).first(where: { $0.id == session.lastLoggedSetID }).map { $0.done && $0.volumePR == true })
-        let content = ActivityContent(state: state, staleDate: nil)
+        var completedState = state
+        completedState.restComplete = session.restUntil.map { $0 <= Date() } ?? false
+        let content = ActivityContent(state: completedState, staleDate: session.restUntil)
+        let alert: AlertConfiguration? = restAlert && completedState.restComplete == true
+            ? AlertConfiguration(title: "Rest complete", body: "Ready for your next set", sound: .default) : nil
         for activity in Activity<WorkoutAttributes>.activities where activity.attributes.sessionID != session.id {
             await activity.end(nil, dismissalPolicy: .immediate)
         }
         if let activity = Activity<WorkoutAttributes>.activities.first(where: { $0.attributes.sessionID == session.id }) {
-            await activity.update(content)
+            await activity.update(content, alertConfiguration: alert)
             liveActivityStatus = .active
         } else if ActivityAuthorizationInfo().areActivitiesEnabled {
             liveActivityStatus = .starting

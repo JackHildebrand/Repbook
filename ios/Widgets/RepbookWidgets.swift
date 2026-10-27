@@ -124,11 +124,13 @@ struct WorkoutLiveActivity: Widget {
                 }
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(context.state.exercise).font(.subheadline.weight(.semibold)).lineLimit(1)
+                        Text(context.state.exercise).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.85)
                         Text("\(context.state.label) · \(context.state.progress)").font(.caption2).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if let end = context.state.restUntil {
+                    if context.state.restComplete == true {
+                        Label("Ready", systemImage: "checkmark.circle.fill").font(.caption.weight(.semibold)).foregroundStyle(.green)
+                    } else if let end = context.state.restUntil {
                         VStack(alignment: .trailing, spacing: 1) {
                             Text("REST").font(.system(size: 9)).foregroundStyle(.secondary)
                             Text(timerInterval: min(context.attributes.started, end)...end, countsDown: true).font(.caption.weight(.semibold)).monospacedDigit().frame(width: 54)
@@ -138,12 +140,16 @@ struct WorkoutLiveActivity: Widget {
                 }
                 if context.state.finished { Text("All sets logged. Open Repbook to finish.").font(.caption) }
                 else { SetControls(context: context) }
-            }.padding(10).foregroundStyle(.white)
+            }.padding(.horizontal, 16).padding(.vertical, 12).foregroundStyle(.white)
                 .activityBackgroundTint(Color.black.opacity(0.9)).activitySystemActionForegroundColor(.white)
                 .widgetURL(URL(string: "repbook://workout"))
         } dynamicIsland: { context in
             DynamicIsland {
-                DynamicIslandExpandedRegion(.leading) { Label(context.attributes.name, systemImage: "dumbbell.fill").font(.caption).foregroundStyle(.primary) }
+                DynamicIslandExpandedRegion(.leading) {
+                    if context.state.restComplete == true {
+                        Label("Rest complete", systemImage: "checkmark.circle.fill").font(.caption.weight(.semibold)).foregroundStyle(.green)
+                    } else { Label(context.attributes.name, systemImage: "dumbbell.fill").font(.caption).foregroundStyle(.primary) }
+                }
                 DynamicIslandExpandedRegion(.trailing) { ActivityTopTimer(context: context) }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -159,12 +165,13 @@ struct WorkoutLiveActivity: Widget {
                     }
                 }
             } compactLeading: {
-                Image(systemName: "dumbbell.fill").foregroundStyle(.blue)
+                Image(systemName: context.state.restComplete == true ? "checkmark.circle.fill" : "dumbbell.fill").foregroundStyle(context.state.restComplete == true ? Color.green : Color.blue)
             } compactTrailing: {
-                if let end = context.state.restUntil {
+                if context.state.restComplete == true { Text("Ready").font(.caption.weight(.semibold)).foregroundStyle(.green) }
+                else if let end = context.state.restUntil {
                     Text(timerInterval: min(context.attributes.started, end)...end, countsDown: true).monospacedDigit().frame(width: 45)
                 } else { Text(context.attributes.started, style: .timer).font(.caption).monospacedDigit().frame(width: 45) }
-            } minimal: { Image(systemName: "dumbbell.fill").foregroundStyle(.blue) }
+            } minimal: { Image(systemName: context.state.restComplete == true ? "checkmark.circle.fill" : "dumbbell.fill").foregroundStyle(context.state.restComplete == true ? Color.green : Color.blue) }
             .widgetURL(URL(string: "repbook://workout"))
         }
     }
@@ -181,26 +188,26 @@ struct SetControls: View {
                 control("REPS", value: "\(state.reps)", weight: 0, reps: 1)
             }
             Button(intent: LogSetIntent(sessionID: context.attributes.sessionID, setID: state.setID)) {
-                Label("Log set", systemImage: "checkmark").font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 32)
+                Label("Log set", systemImage: "checkmark").font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 36)
                     .foregroundStyle(.black).background(.white, in: Capsule())
             }.buttonStyle(.plain).accessibilityLabel("Log \(state.label)")
         }
     }
     private func control(_ title: String, value: String, weight: Double, reps: Int) -> some View {
-        VStack(spacing: 1) {
-            Text(title).font(.system(size: 9)).foregroundStyle(.secondary)
-            Text(value).font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
-                .contentTransition(.identity).animation(nil, value: value)
-            HStack(spacing: 12) {
+        VStack(spacing: 3) {
+            Text(title).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+            HStack(spacing: 4) {
                 adjust("minus.circle", weight: -weight, reps: -reps, label: "Decrease " + title.lowercased())
+                Text(value).font(.system(size: 20, weight: .semibold, design: .rounded)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity).contentTransition(.identity).animation(nil, value: value)
                 adjust("plus.circle", weight: weight, reps: reps, label: "Increase " + title.lowercased())
             }
-        }.padding(4).frame(maxWidth: .infinity)
+        }.padding(.horizontal, 4).padding(.vertical, 6).frame(maxWidth: .infinity)
             .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
     }
     private func adjust(_ icon: String, weight: Double, reps: Int, label: String) -> some View {
         Button(intent: AdjustSetIntent(sessionID: context.attributes.sessionID, setID: state.setID, weightDelta: weight, repDelta: reps)) {
-            Image(systemName: icon).font(.system(size: 17)).frame(width: 32, height: 24)
+            Image(systemName: icon).font(.system(size: 17)).frame(width: 30, height: 30)
         }.buttonStyle(.plain).accessibilityLabel(label)
     }
 }
@@ -214,7 +221,9 @@ struct ActivityTopTimer: View {
                 Text(context.attributes.started, style: .timer)
                     .frame(width: 64, alignment: .trailing)
             }
-            if let end = context.state.restUntil {
+            if context.state.restComplete == true {
+                Label("Rest complete", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            } else if let end = context.state.restUntil {
                 HStack(spacing: 4) {
                     Text("Rest")
                     Text(timerInterval: min(context.attributes.started, end)...end, countsDown: true)

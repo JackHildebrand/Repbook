@@ -164,7 +164,7 @@ struct SettingsView: View {
     @State private var csvMessage: String?
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("haptics") private var haptics = true
-    @AppStorage("restNotifications") private var restNotifications = false
+    @AppStorage("restNotifications") private var restNotifications = true
     @AppStorage("weightIncrement") private var weightIncrement = 0.0
     @AppStorage("repIncrement") private var repIncrement = 1
     var body: some View {
