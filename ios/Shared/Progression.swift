@@ -1,7 +1,7 @@
 import Foundation
 
 enum ProgressMetric: String, CaseIterable, Identifiable {
-    case weight = "Top weight", reps = "Total reps", volume = "Volume"
+    case weight = "Top weight", estimatedMax = "Est. 1RM", reps = "Total reps", volume = "Volume"
     var id: String { rawValue }
     func unit(_ unit: String) -> String { self == .reps ? "reps" : self == .volume ? "\(unit) volume" : unit }
 }
@@ -32,6 +32,7 @@ extension RepbookData {
                 guard !sets.isEmpty else { return nil }
                 let value: Double
                 switch metric {
+                case .estimatedMax: value = sets.map { $0.weight * (1 + Double($0.reps) / 30) }.max() ?? 0
                 case .weight: value = sets.map(\.weight).max() ?? 0
                 case .reps: value = sets.reduce(0) { $0 + Double($1.reps) }
                 case .volume: value = sets.reduce(0) { $0 + $1.weight * Double($1.reps) }
@@ -41,7 +42,7 @@ extension RepbookData {
             return ExerciseProgress(exercise: exercise, uses: sessions.count, points: points)
         }.sorted {
             $0.uses == $1.uses ? $0.exercise.name.localizedStandardCompare($1.exercise.name) == .orderedAscending : $0.uses > $1.uses
-        }.prefix(6).map { $0 }
+        }
     }
 
     var weightRecords: [(exercise: Exercise, weight: Double)] {

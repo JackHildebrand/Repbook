@@ -2,6 +2,7 @@ import ActivityKit
 import Combine
 import Foundation
 import UIKit
+import UserNotifications
 
 @MainActor
 final class WorkoutStore: ObservableObject {
@@ -26,6 +27,7 @@ final class WorkoutStore: ObservableObject {
     static let shared = WorkoutStore()
     @Published private(set) var data: RepbookData
     @Published var error: String?
+    @Published var completedSession: Session?
     @Published var currentSetNavigation = UUID()
     @Published private(set) var liveActivityStatus: LiveActivityStatus = .idle
     private let url: URL
@@ -33,7 +35,9 @@ final class WorkoutStore: ObservableObject {
     private var storageHealthy = true
 
     private init() {
-        url = URL.applicationSupportDirectory.appending(path: "Repbook/data.json")
+        let testing = ProcessInfo.processInfo.arguments.contains("-repbook-ui-testing")
+        url = URL.applicationSupportDirectory.appending(path: testing ? "RepbookUITests/data.json" : "Repbook/data.json")
+        if testing && ProcessInfo.processInfo.arguments.contains("-repbook-reset-test-data") { try? FileManager.default.removeItem(at: url) }
         do {
             if FileManager.default.fileExists(atPath: url.path) {
                 data = try BackupImporter.decode(Data(contentsOf: url))
@@ -49,6 +53,17 @@ final class WorkoutStore: ObservableObject {
     func change(_ action: (inout RepbookData) -> Void) {
         guard storageHealthy else { error = "Import a backup to recover saved data before making changes."; return }
         var updated = data; action(&updated)
+        if var session = updated.active {
+            for ei in session.exercises.indices {
+                let history = updated.workouts.flatMap(\.exercises).filter { $0.exerciseID == session.exercises[ei].exerciseID }.flatMap(\.sets).filter { $0.done && !$0.warmup }
+                let best = history.map { $0.weight * Double($0.reps) }.max() ?? 0
+                for si in session.exercises[ei].sets.indices {
+                    let set = session.exercises[ei].sets[si]
+                    session.exercises[ei].sets[si].volumePR = set.done && !set.warmup && set.weight * Double(set.reps) > best
+                }
+            }
+            updated.active = session
+        }
         do {
             try updated.validate()
             try persist(updated)
@@ -103,7 +118,7 @@ final class WorkoutStore: ObservableObject {
             for si in session.exercises[ei].sets.indices where session.exercises[ei].sets[si].done && !session.exercises[ei].sets[si].warmup {
                 let set = session.exercises[ei].sets[si]
                 session.exercises[ei].sets[si].weightPR = previousWeight.map { set.weight > $0 } ?? true
-                session.exercises[ei].sets[si].volumePR = previousVolume.map { set.weight * Double(set.reps) > $0 } ?? true
+                session.exercises[ei].sets[si].volumePR = set.weight * Double(set.reps) > (previousVolume ?? 0)
             }
         }
         session.ended = Date(); session.restUntil = nil
@@ -111,6 +126,7 @@ final class WorkoutStore: ObservableObject {
         session.exercises.removeAll { $0.sets.isEmpty }
         guard session.completedSets > 0 else { error = "Log at least one set before finishing."; return }
         change { $0.workouts.insert(session, at: 0); $0.active = nil }
+        if data.active == nil { completedSession = session }
     }
 
     private func historicalSets(for exerciseID: String) -> [WorkoutSet] {
@@ -137,16 +153,51 @@ final class WorkoutStore: ObservableObject {
             $0.active!.exercises[ei].sets[si].weightPR = done && records.weight
             $0.active!.exercises[ei].sets[si].volumePR = done && records.volume
             $0.active!.lastLoggedSetID = done ? target.id : nil
-            $0.active!.restUntil = $0.active!.exercises[ei].sets[si].done && $0.restSeconds > 0 ? Date().addingTimeInterval(Double($0.restSeconds)) : nil
+            let seconds = $0.active!.exercises[ei].restSeconds ?? $0.restSeconds
+            $0.active!.restUntil = done && seconds > 0 ? Date().addingTimeInterval(Double(seconds)) : nil
         }
+        if data.active?.exercises[ei].sets[si].done == true {
+            feedback(pr: records.volume)
+        }
+        updateRestNotification()
+    }
+
+    func feedback(pr: Bool = false) {
+        guard UserDefaults.standard.object(forKey: "haptics") as? Bool ?? true else { return }
+        if pr { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+        else { UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.5) }
+    }
+
+    func adjustRest(_ seconds: Int) {
+        change {
+            guard let end = $0.active?.restUntil else { return }
+            $0.active?.restUntil = max(Date(), end.addingTimeInterval(Double(seconds)))
+        }
+        updateRestNotification()
+    }
+
+    func updateRestNotification() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["repbook-rest"])
+        guard UserDefaults.standard.bool(forKey: "restNotifications"), let end = data.active?.restUntil,
+              end.timeIntervalSinceNow > 0 else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Rest complete"; content.body = "Ready for your next set."; content.sound = .default
+        let request = UNNotificationRequest(identifier: "repbook-rest", content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(1, end.timeIntervalSinceNow), repeats: false))
+        center.add(request)
     }
 
     func adjustCurrent(sessionID: String, setID: String, weight: Double, reps: Int) async {
         guard let session = data.active, session.id == sessionID, let next = session.nextSet,
               session.exercises[next.exercise].sets[next.set].id == setID else { return }
+        let configuredWeight = UserDefaults.standard.double(forKey: "weightIncrement")
+        let configuredReps = max(1, UserDefaults.standard.integer(forKey: "repIncrement"))
+        let weightDelta = weight == 0 ? 0 : (weight < 0 ? -1.0 : 1.0) * (configuredWeight > 0 ? configuredWeight : abs(weight))
+        let repDelta = reps == 0 ? 0 : (reps < 0 ? -1 : 1) * configuredReps
         change {
-            $0.active!.exercises[next.exercise].sets[next.set].weight = max(0, session.exercises[next.exercise].sets[next.set].weight + weight)
-            $0.active!.exercises[next.exercise].sets[next.set].reps = min(999, max(1, session.exercises[next.exercise].sets[next.set].reps + reps))
+            $0.active!.exercises[next.exercise].sets[next.set].weight = max(0, session.exercises[next.exercise].sets[next.set].weight + weightDelta)
+            $0.active!.exercises[next.exercise].sets[next.set].reps = min(999, max(1, session.exercises[next.exercise].sets[next.set].reps + repDelta))
         }
         await activityTask?.value
     }
@@ -155,13 +206,6 @@ final class WorkoutStore: ObservableObject {
         guard let session = data.active, session.id == sessionID, let next = session.nextSet,
               session.exercises[next.exercise].sets[next.set].id == setID else { return }
         toggleSet(exercise: next.exercise, set: next.set)
-        if let logged = data.active?.exercises[next.exercise].sets[next.set], logged.done {
-            if logged.weightPR == true || logged.volumePR == true {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-            } else {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.5)
-            }
-        }
         await activityTask?.value
     }
 
@@ -184,7 +228,10 @@ final class WorkoutStore: ObservableObject {
     }
 
     private func syncActivity() async {
+        // UI tests exercise persistence and navigation independently of simulator ActivityKit authorization.
+        if ProcessInfo.processInfo.arguments.contains("-repbook-ui-testing") { liveActivityStatus = .disabled; return }
         guard let session = data.active else {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["repbook-rest"])
             for activity in Activity<WorkoutAttributes>.activities { await activity.end(nil, dismissalPolicy: .immediate) }
             liveActivityStatus = .idle
             return
@@ -209,7 +256,7 @@ final class WorkoutStore: ObservableObject {
             setID: set?.id ?? "", label: next.map { "\(set?.warmup == true ? "Warmup" : "Set") \($0.set + 1)" } ?? "Finish in Repbook",
             progress: progress, weight: set?.weight ?? 0, reps: set?.reps ?? 0, unit: data.unit,
             restUntil: session.restUntil, finished: next == nil,
-            loggedPR: session.exercises.flatMap(\.sets).first(where: { $0.id == session.lastLoggedSetID }).map { $0.done && ($0.weightPR == true || $0.volumePR == true) })
+            loggedPR: session.exercises.flatMap(\.sets).first(where: { $0.id == session.lastLoggedSetID }).map { $0.done && $0.volumePR == true })
         let content = ActivityContent(state: state, staleDate: nil)
         for activity in Activity<WorkoutAttributes>.activities where activity.attributes.sessionID != session.id {
             await activity.end(nil, dismissalPolicy: .immediate)

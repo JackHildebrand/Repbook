@@ -53,9 +53,9 @@ struct ScheduledRoutineView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(entry.date.formatted(.dateTime.weekday(.wide)))
-                .font(.system(size: 17)).foregroundStyle(Color.gray)
+                .font(.system(size: 17)).foregroundStyle(.secondary)
             Text(name.isEmpty ? "Rest day" : name)
-                .font(.system(size: 23, weight: .bold)).foregroundStyle(Color.black)
+                .font(.system(size: 23, weight: .bold)).foregroundStyle(.primary)
                 .lineLimit(2).minimumScaleFactor(0.7)
             Spacer(minLength: 4)
             HStack(alignment: .bottom) {
@@ -71,12 +71,12 @@ struct ScheduledRoutineView: View {
                     Image(systemName: "moon.zzz").font(.title2).foregroundStyle(.gray)
                 }
                 Spacer()
-                Image(systemName: "dumbbell.fill").font(.title3).foregroundStyle(.black)
+                Image(systemName: "dumbbell.fill").font(.title3).foregroundStyle(.primary)
                     .accessibilityLabel("Repbook")
             }
         }
         .padding(3)
-        .containerBackground(.white, for: .widget)
+        .containerBackground(Color(uiColor: .systemBackground), for: .widget)
     }
 }
 
@@ -116,30 +116,34 @@ struct ScheduledRoutineLockScreenView: View {
 struct WorkoutLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: WorkoutAttributes.self) { context in
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Label(context.attributes.name, systemImage: "dumbbell.fill").font(.caption.bold())
+                    Label(context.attributes.name, systemImage: "dumbbell.fill").font(.caption.weight(.semibold))
                     Spacer()
-                    ActivityTopTimer(context: context)
-                }.foregroundStyle(.blue)
-                HStack(alignment: .firstTextBaseline) {
-                    Text(context.state.exercise).font(.headline).lineLimit(2)
+                    Text(context.attributes.started, style: .timer).font(.caption).monospacedDigit()
+                }
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(context.state.exercise).font(.subheadline.weight(.semibold)).lineLimit(1)
+                        Text("\(context.state.label) · \(context.state.progress)").font(.caption2).foregroundStyle(.secondary)
+                    }
                     Spacer()
-                    Text(context.state.progress).font(.subheadline.bold()).foregroundStyle(.secondary)
+                    if let end = context.state.restUntil {
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text("REST").font(.system(size: 9)).foregroundStyle(.secondary)
+                            Text(timerInterval: min(context.attributes.started, end)...end, countsDown: true).font(.caption.weight(.semibold)).monospacedDigit().frame(width: 54)
+                        }
+                    }
+                    if context.state.loggedPR == true { Image(systemName: "medal.fill").foregroundStyle(.green).accessibilityLabel("Volume PR logged") }
                 }
-                if context.state.finished {
-                    Text("All sets logged. Open Repbook to finish.").font(.caption)
-                } else {
-                    SetControls(context: context)
-                }
-                if context.state.loggedPR == true {
-                    Text("🏅 PR logged").font(.caption.bold()).foregroundStyle(.blue)
-                }
-            }.padding().activityBackgroundTint(Color.black.opacity(0.9)).activitySystemActionForegroundColor(.blue)
+                if context.state.finished { Text("All sets logged. Open Repbook to finish.").font(.caption) }
+                else { SetControls(context: context) }
+            }.padding(10).foregroundStyle(.white)
+                .activityBackgroundTint(Color.black.opacity(0.9)).activitySystemActionForegroundColor(.white)
                 .widgetURL(URL(string: "repbook://workout"))
         } dynamicIsland: { context in
             DynamicIsland {
-                DynamicIslandExpandedRegion(.leading) { Label(context.attributes.name, systemImage: "dumbbell.fill").font(.caption).foregroundStyle(.blue) }
+                DynamicIslandExpandedRegion(.leading) { Label(context.attributes.name, systemImage: "dumbbell.fill").font(.caption).foregroundStyle(.primary) }
                 DynamicIslandExpandedRegion(.trailing) { ActivityTopTimer(context: context) }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -148,9 +152,10 @@ struct WorkoutLiveActivity: Widget {
                             Spacer()
                             Text(context.state.progress).font(.subheadline.bold()).foregroundStyle(.secondary)
                         }
-                        if !context.state.finished { SetControls(context: context) }
-                        else { Text("Open Repbook to finish").font(.caption) }
-                        if context.state.loggedPR == true { Text("🏅 PR logged").font(.caption.bold()).foregroundStyle(.blue) }
+                        if !context.state.finished {
+                            Text("\(context.state.weight.formatted()) \(context.state.unit) × \(context.state.reps) reps").font(.subheadline).monospacedDigit()
+                        } else { Text("Open Repbook to finish").font(.caption) }
+                        if context.state.loggedPR == true { Label("Volume PR logged", systemImage: "medal.fill").font(.caption.bold()).foregroundStyle(.green) }
                     }
                 }
             } compactLeading: {
@@ -158,7 +163,7 @@ struct WorkoutLiveActivity: Widget {
             } compactTrailing: {
                 if let end = context.state.restUntil {
                     Text(timerInterval: min(context.attributes.started, end)...end, countsDown: true).monospacedDigit().frame(width: 45)
-                } else { Text(context.state.progress).font(.caption.bold()) }
+                } else { Text(context.attributes.started, style: .timer).font(.caption).monospacedDigit().frame(width: 45) }
             } minimal: { Image(systemName: "dumbbell.fill").foregroundStyle(.blue) }
             .widgetURL(URL(string: "repbook://workout"))
         }
@@ -170,28 +175,33 @@ struct SetControls: View {
     private var state: WorkoutAttributes.ContentState { context.state }
     private var step: Double { state.unit == "kg" ? 2.5 : 5 }
     var body: some View {
-        HStack(spacing: 8) {
-            fastStepper(value: "\(state.weight.formatted()) \(state.unit)", minusWeight: -step, plusWeight: step)
-            fastStepper(value: "\(state.reps) reps", minusReps: -1, plusReps: 1)
+        VStack(spacing: 6) {
+            HStack(spacing: 10) {
+                control("WEIGHT", value: "\(state.weight.formatted()) \(state.unit)", weight: step, reps: 0)
+                control("REPS", value: "\(state.reps)", weight: 0, reps: 1)
+            }
             Button(intent: LogSetIntent(sessionID: context.attributes.sessionID, setID: state.setID)) {
-                Image(systemName: "checkmark").font(.headline).frame(width: 34, height: 38)
-            }.buttonStyle(.borderedProminent).tint(.blue).accessibilityLabel("Log \(state.label)")
+                Label("Log set", systemImage: "checkmark").font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 32)
+                    .foregroundStyle(.black).background(.white, in: Capsule())
+            }.buttonStyle(.plain).accessibilityLabel("Log \(state.label)")
         }
     }
-    private func fastStepper(value: String, minusWeight: Double = 0, plusWeight: Double = 0,
-                             minusReps: Int = 0, plusReps: Int = 0) -> some View {
-        HStack(spacing: 2) {
-            adjust("−", weight: minusWeight, reps: minusReps)
-            Text(value).font(.caption.bold()).monospacedDigit().frame(minWidth: 46)
-                .contentTransition(.identity)
-                .animation(nil, value: value)
-            adjust("+", weight: plusWeight, reps: plusReps)
-        }.frame(maxWidth: .infinity)
+    private func control(_ title: String, value: String, weight: Double, reps: Int) -> some View {
+        VStack(spacing: 1) {
+            Text(title).font(.system(size: 9)).foregroundStyle(.secondary)
+            Text(value).font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+                .contentTransition(.identity).animation(nil, value: value)
+            HStack(spacing: 12) {
+                adjust("minus.circle", weight: -weight, reps: -reps, label: "Decrease " + title.lowercased())
+                adjust("plus.circle", weight: weight, reps: reps, label: "Increase " + title.lowercased())
+            }
+        }.padding(4).frame(maxWidth: .infinity)
+            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
     }
-    private func adjust(_ label: String, weight: Double = 0, reps: Int = 0) -> some View {
+    private func adjust(_ icon: String, weight: Double, reps: Int, label: String) -> some View {
         Button(intent: AdjustSetIntent(sessionID: context.attributes.sessionID, setID: state.setID, weightDelta: weight, repDelta: reps)) {
-            Text(label).font(.title3.bold()).frame(width: 32, height: 38)
-        }.buttonStyle(.plain).contentShape(Rectangle()).tint(.blue)
+            Image(systemName: icon).font(.system(size: 17)).frame(width: 32, height: 24)
+        }.buttonStyle(.plain).accessibilityLabel(label)
     }
 }
 

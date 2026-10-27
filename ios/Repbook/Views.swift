@@ -1,320 +1,144 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import UserNotifications
 
 struct RootView: View {
     @EnvironmentObject private var store: WorkoutStore
     @State private var selected = 0
-    var body: some View {
+    @State private var workout = false
+    @State private var summary = false
+        var body: some View {
         TabView(selection: $selected) {
-            NavigationStack { WorkoutHome() }.tabItem { Label("Workout", systemImage: "dumbbell.fill") }.tag(0)
-            NavigationStack { ProgressionView() }.tabItem { Label("Progression", systemImage: "chart.xyaxis.line") }.tag(1)
-            NavigationStack { HistoryView() }.tabItem { Label("History", systemImage: "clock.arrow.circlepath") }.tag(2)
+            NavigationStack { WorkoutHome(onStart: openWorkout) }.tint(.primary).safeAreaInset(edge: .bottom) { miniBar }
+                .tabItem { Label("Home", systemImage: "house.fill") }.tag(0)
+            NavigationStack { RoutinesView(onStart: openWorkout) }.tint(.primary).safeAreaInset(edge: .bottom) { miniBar }
+                .tabItem { Label("Routines", systemImage: "square.stack.fill") }.tag(1)
+            NavigationStack { ProgressionView() }.tint(.primary).safeAreaInset(edge: .bottom) { miniBar }
+                .tabItem { Label("Progress", systemImage: "chart.xyaxis.line") }.tag(2)
+            NavigationStack { HistoryView() }.tint(.primary).safeAreaInset(edge: .bottom) { miniBar }
+                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }.tag(3)
         }
-        .onOpenURL { _ in selected = 0; store.currentSetNavigation = UUID() }
+        .tint(.blue)
+        .onChange(of: selected) { _, _ in
+            if UserDefaults.standard.object(forKey: "haptics") as? Bool ?? true { UISelectionFeedbackGenerator().selectionChanged() }
+        }
+        .onOpenURL { _ in openWorkout() }
+        .fullScreenCover(isPresented: $workout, onDismiss: { if store.completedSession != nil { summary = true } }) {
+            NavigationStack { ActiveWorkoutView(onMinimize: { workout = false }) }
+                .environmentObject(store)
+        }
+        .sheet(isPresented: $summary) {
+            if let session = store.completedSession { WorkoutSummary(session: session) }
+        }
+        .onChange(of: store.data.active?.id) { _, id in if id == nil { workout = false } }
+        .onChange(of: store.completedSession?.id) { _, id in if id == nil { summary = false; selected = 0 } }
         .alert("Repbook", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("OK") { store.error = nil }
         } message: { Text(store.error ?? "") }
     }
+    private func openWorkout() {
+        guard store.data.active != nil else { selected = 0; return }
+        store.currentSetNavigation = UUID(); workout = true
+    }
+    @ViewBuilder private var miniBar: some View {
+        if let session = store.data.active {
+            MiniWorkoutBar(session: session, action: openWorkout).padding(.horizontal, 20).padding(.vertical, 8)
+        }
+    }
 }
 
-struct WorkoutHome: View {
+struct MiniWorkoutBar: View {
+    @EnvironmentObject private var store: WorkoutStore
+    let session: Session
+    var action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: "dumbbell.fill").foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(session.name).font(.headline).lineLimit(1)
+                    if let next = session.nextSet {
+                        Text("\(store.name(session.exercises[next.exercise].exerciseID)) · Set \(next.set + 1)")
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    } else { Text("All sets logged").font(.caption).foregroundStyle(.secondary) }
+                }
+                Spacer(minLength: 0)
+                Text(session.started, style: .timer).font(.subheadline.weight(.semibold)).monospacedDigit()
+                Image(systemName: "chevron.up").font(.caption)
+            }.padding(16).frame(minHeight: 64).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+            .modifier(FloatingWorkoutSurface())
+            .overlay(Capsule().strokeBorder(.primary.opacity(0.06)))
+            .accessibilityLabel("Resume \(session.name) at current set")
+    }
+}
+
+struct RoutinesView: View {
+    var onStart: () -> Void
     @EnvironmentObject private var store: WorkoutStore
     @State private var editor: Routine?
-    @State private var settings = false
-    var body: some View {
-        Group {
-            if store.data.active != nil { ActiveWorkoutView() }
-            else {
-                List {
-                    Section("Your routines") {
-                        ForEach(store.data.routines) { routine in
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    VStack(alignment: .leading) {
-                                        Text(routine.name).font(.headline)
-                                        Text("\(routine.exercises.count) exercises").font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Button { editor = routine } label: { Image(systemName: "pencil") }.buttonStyle(.borderless).accessibilityLabel("Edit \(routine.name)")
-                                    Button("Start") { store.start(routine) }.buttonStyle(.borderedProminent)
-                                }
-                            }.padding(.vertical, 8)
-                        }
-                        .onDelete { offsets in store.change { $0.routines.remove(atOffsets: offsets) } }
-                    }
-                }.navigationTitle("Repbook")
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button { settings = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Settings")
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { editor = Routine(name: "New routine") } label: { Image(systemName: "plus") }.accessibilityLabel("New routine")
-                    }
-                }
-            }
-        }
-        .sheet(item: $editor) { RoutineEditor(draft: $0) }
-        .sheet(isPresented: $settings) { SettingsSheet() }
-    }
-}
-
-struct ActiveWorkoutView: View {
-    @EnvironmentObject private var store: WorkoutStore
-    @State private var discard = false
-    @State private var finish = false
-    @State private var addingExercise = false
-    @State private var settings = false
-    @FocusState private var editingValue: Bool
-    var body: some View {
-        if let session = store.data.active {
-            ScrollViewReader { scroll in
-            List {
-                Section {
-                    Text(session.name).font(.title3.bold())
-                    if let end = session.restUntil {
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            HStack {
-                                Text(end > context.date ? "Rest" : "Ready for your next set")
-                                Spacer()
-                                if end > context.date { Text(timerInterval: context.date...end, countsDown: true).monospacedDigit() }
-                                Button("Skip") { store.change { $0.active?.restUntil = nil } }.buttonStyle(.borderless)
-                            }.foregroundStyle(.blue)
-                        }
-                    }
-                    Text("\(session.completedSets) sets logged · \(session.volume.formatted(.number.precision(.fractionLength(0)))) \(store.data.unit) volume")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                ForEach(Array(session.exercises.enumerated()), id: \.element.id) { ei, exercise in
-                    Section {
-                        HStack {
-                            Text("Set").frame(width: 40)
-                            Text(store.data.unit).frame(maxWidth: .infinity)
-                            Text("Reps").frame(maxWidth: .infinity)
-                            Text("Log").frame(width: 40)
-                        }.font(.caption).foregroundStyle(.secondary)
-                        ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { si, set in
-                            HStack(spacing: 10) {
-                                let prs = store.personalRecords(exerciseID: exercise.exerciseID, set: set)
-                                VStack(spacing: 1) {
-                                    if set.done && (prs.weight || prs.volume) { Text("🏅").font(.caption2).accessibilityLabel("Personal record") }
-                                    Text(set.warmup ? "W" : "\(exercise.sets.prefix(si + 1).filter { !$0.warmup }.count)")
-                                        .font(.subheadline.bold()).foregroundStyle(set.warmup ? .secondary : .primary)
-                                }.frame(width: 32)
-                                TextField("Weight", value: setBinding(ei, si, \.weight), format: .number)
-                                    .keyboardType(.decimalPad).multilineTextAlignment(.center).textFieldStyle(.roundedBorder)
-                                    .focused($editingValue).selectAllOnTap()
-                                    .accessibilityLabel("\(store.name(exercise.exerciseID)) set \(si + 1) weight")
-                                TextField("Reps", value: setBinding(ei, si, \.reps), format: .number)
-                                    .keyboardType(.numberPad).multilineTextAlignment(.center).textFieldStyle(.roundedBorder)
-                                    .focused($editingValue).selectAllOnTap()
-                                    .accessibilityLabel("\(store.name(exercise.exerciseID)) set \(si + 1) reps")
-                                Button { store.toggleSet(exercise: ei, set: si) } label: {
-                                    Image(systemName: set.done ? "checkmark.circle.fill" : "circle").font(.title2)
-                                        .foregroundStyle(set.done ? .green : .secondary)
-                                }.buttonStyle(.borderless).accessibilityLabel(set.done ? "Unlog set \(si + 1)" : "Log set \(si + 1)")
-                            }.id(set.id).listRowBackground(set.done ? Color.green.opacity(0.12) : Color(uiColor: .secondarySystemGroupedBackground))
-                            .swipeActions { Button("Delete", role: .destructive) { store.change { $0.active?.exercises[ei].sets.remove(at: si) } } }
-                        }
-                        Button("Add set", systemImage: "plus") {
-                            store.change { data in
-                                var set = data.active!.exercises[ei].sets.last(where: { !$0.warmup }) ?? WorkoutSet()
-                                set.id = UUID().uuidString; set.done = false; set.warmup = false
-                                data.active!.exercises[ei].sets.append(set)
-                            }
-                        }
-                    } header: { Text(store.name(exercise.exerciseID)) }
-                }
-                Section { Button("Add exercise", systemImage: "plus") { addingExercise = true } }
-                Section { Button("Discard workout", role: .destructive) { discard = true } }
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .background(KeyboardDismissTap())
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { settings = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Settings")
-                }
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "timer")
-                        Text(session.started, style: .timer).monospacedDigit().fontWeight(.semibold)
-                    }.font(.subheadline)
-                }
-                ToolbarItem(placement: .topBarTrailing) { Button("Finish") { finish = true }.fontWeight(.bold) }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { editingValue = false }
-                }
-            }
-            .confirmationDialog("Finish and save this workout?", isPresented: $finish, titleVisibility: .visible) {
-                Button("Save workout") { store.finish() }
-            } message: { Text("Only logged sets will be saved.") }
-            .confirmationDialog("Discard this workout?", isPresented: $discard, titleVisibility: .visible) {
-                Button("Discard", role: .destructive) { store.change { $0.active = nil } }
-            }
-            .sheet(isPresented: $addingExercise) {
-                ExercisePicker { exercise in
-                    store.change { $0.active?.exercises.append(SessionExercise(exerciseID: exercise.id, sets: [WorkoutSet()])) }
-                    addingExercise = false
-                }
-            }
-            .sheet(isPresented: $settings) { SettingsSheet() }
-            .task {
-                store.showLiveActivity()
-                scrollToCurrent(scroll)
-            }
-            .onChange(of: store.currentSetNavigation) { _, _ in scrollToCurrent(scroll) }
-            }
-        }
-    }
-    private func scrollToCurrent(_ scroll: ScrollViewProxy) {
-        guard let session = store.data.active else { return }
-        let id = session.nextSet.map { session.exercises[$0.exercise].sets[$0.set].id }
-            ?? session.exercises.last?.sets.last?.id
-        guard let id else { return }
-        DispatchQueue.main.async { scroll.scrollTo(id, anchor: .center) }
-    }
-    private func setBinding<T>(_ ei: Int, _ si: Int, _ key: WritableKeyPath<WorkoutSet, T>) -> Binding<T> {
-        let exercise = store.data.active!.exercises[ei]
-        let set = exercise.sets[si]
-        return Binding(get: {
-            store.data.active?.exercises.first(where: { $0.id == exercise.id })?.sets.first(where: { $0.id == set.id })?[keyPath: key] ?? set[keyPath: key]
-        }, set: { value in
-            guard let session = store.data.active,
-                  let index = session.exercises.firstIndex(where: { $0.id == exercise.id }),
-                  let setIndex = session.exercises[index].sets.firstIndex(where: { $0.id == set.id }) else { return }
-            store.change { $0.active!.exercises[index].sets[setIndex][keyPath: key] = value }
-        })
-    }
-}
-
-struct RoutineEditor: View {
-    @EnvironmentObject private var store: WorkoutStore
-    @Environment(\.dismiss) private var dismiss
-    @State var draft: Routine
-    @State private var adding = false
-    @State private var reordering = false
-    var body: some View {
-        NavigationStack {
-            List {
-                Section { TextField("Routine name", text: $draft.name) }
-                Section {
-                    ForEach($draft.exercises) { $item in
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(store.name(item.exerciseID)).font(.headline)
-                            if !reordering {
-                                Stepper("Warmup sets: \(item.warmupCount)", value: $item.warmupCount, in: 0...2)
-                                ForEach($item.sets) { $set in
-                                    HStack {
-                                        TextField(store.data.unit, value: $set.weight, format: .number).keyboardType(.decimalPad)
-                                            .accessibilityLabel("Template weight")
-                                        TextField("Reps", value: $set.reps, format: .number).keyboardType(.numberPad)
-                                            .accessibilityLabel("Template reps")
-                                        Button(role: .destructive) { item.sets.removeAll { $0.id == set.id } } label: { Image(systemName: "minus.circle") }
-                                            .buttonStyle(.borderless).disabled(item.sets.count <= 1).accessibilityLabel("Remove set")
-                                    }.textFieldStyle(.roundedBorder)
-                                }
-                                Button("Add set", systemImage: "plus") {
-                                    var set = item.sets.last ?? WorkoutSet(); set.id = UUID().uuidString; item.sets.append(set)
-                                }.buttonStyle(.borderless)
-                            }
-                        }.padding(.vertical, 6)
-                    }
-                    .onMove { draft.exercises.move(fromOffsets: $0, toOffset: $1) }
-                    .onDelete { draft.exercises.remove(atOffsets: $0) }
-                } header: { Text(reordering ? "Drag handles to reorder" : "Exercises") }
-                if !reordering { Button("Add exercise", systemImage: "plus") { adding = true } }
-            }
-            .environment(\.editMode, .constant(reordering ? .active : .inactive))
-            .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("Edit routine").navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .primaryAction) { Button(reordering ? "Done" : "Reorder") { withAnimation { reordering.toggle() } } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        let value = draft
-                        store.change { data in
-                            if let index = data.routines.firstIndex(where: { $0.id == value.id }) { data.routines[index] = value }
-                            else { data.routines.append(value) }
-                        }
-                        if store.error == nil { dismiss() }
-                    }.disabled(draft.name.trimmingCharacters(in: .whitespaces).isEmpty || draft.exercises.isEmpty)
-                }
-            }
-            .sheet(isPresented: $adding) {
-                ExercisePicker(excluded: Set(draft.exercises.map(\.exerciseID))) { exercise in
-                    draft.exercises.append(RoutineExercise(exerciseID: exercise.id)); adding = false
-                }
-            }
-        }
-    }
-}
-
-struct ExercisePicker: View {
-    @EnvironmentObject private var store: WorkoutStore
-    @Environment(\.dismiss) private var dismiss
-    var excluded: Set<String> = []
-    var onSelect: (Exercise) -> Void
     @State private var query = ""
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(store.data.exercises.filter { !excluded.contains($0.id) && (query.isEmpty || $0.name.localizedCaseInsensitiveContains(query)) }) { exercise in
-                    Button(exercise.name) { onSelect(exercise) }
-                }
-                if !query.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Button("Create \(query)", systemImage: "plus") {
-                        let exercise = Exercise(name: query.trimmingCharacters(in: .whitespaces))
-                        store.change { $0.exercises.append(exercise) }
-                        if store.error == nil { onSelect(exercise) }
-                    }
-                }
-            }.searchable(text: $query).navigationTitle("Add exercise")
-                .toolbar { Button("Cancel") { dismiss() } }
-        }
-    }
-}
-
-struct HistoryView: View {
-    @EnvironmentObject private var store: WorkoutStore
+    @State private var pendingStart: Routine?
+    @State private var pendingDelete: Routine?
+    @State private var scheduling = false
     var body: some View {
         List {
-            if store.data.workouts.isEmpty {
-                ContentUnavailableView("Your first workout starts here", systemImage: "dumbbell", description: Text("Finished workouts will appear here."))
+            if store.data.routines.isEmpty {
+                ContentUnavailableView("Make it your routine", systemImage: "square.stack", description: Text("Save your exercises and start faster next time."))
             }
-            ForEach(store.data.workouts.sorted { $0.started > $1.started }) { session in
-                NavigationLink {
-                    List {
-                        Section {
-                            Text(session.started.formatted(date: .abbreviated, time: .shortened))
-                            Text("\(session.completedSets) sets · \(session.volume.formatted()) \(store.data.unit)")
+            ForEach(store.data.routines.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }) { routine in
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(routine.name).font(.title2.bold())
+                            Text("\(routine.exercises.count) exercises · \(routine.exercises.reduce(0) { $0 + $1.sets.count }) working sets")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
-                        ForEach(session.exercises) { exercise in
-                            Section(store.name(exercise.exerciseID)) {
-                                ForEach(exercise.sets) { set in
-                                    HStack {
-                                        Text(set.warmup ? "Warmup" : "Set").foregroundStyle(.secondary)
-                                        if set.weightPR == true || set.volumePR == true {
-                                            Text("🏅").accessibilityLabel("Personal record")
-                                        }
-                                        Spacer()
-                                        Text("\(set.weight.formatted()) \(store.data.unit) × \(set.reps)")
-                                    }
-                                }
+                        Spacer()
+                        Menu {
+                            Button("Edit", systemImage: "pencil") { editor = routine }
+                            Button("Duplicate", systemImage: "plus.square.on.square") {
+                                var copy = routine; copy.id = UUID().uuidString; copy.name += " copy"
+                                editor = copy
                             }
-                        }
-                    }.navigationTitle(session.name)
-                } label: {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(session.name).font(.headline)
-                        Text(session.started.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
-                        Text("\(session.completedSets) sets · \(session.volume.formatted()) \(store.data.unit)").font(.caption)
-                    }.padding(.vertical, 6)
-                }
+                            Button("Schedule", systemImage: "calendar") { scheduling = true }
+                            Button("Delete", systemImage: "trash", role: .destructive) { pendingDelete = routine }
+                        } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
+                            .accessibilityLabel("Actions for \(routine.name)")
+                    }
+                    let weekdays = [2, 3, 4, 5, 6, 7, 1].filter { store.data.weekdayRoutines?[String($0)] == routine.id }
+                    if !weekdays.isEmpty {
+                        Text(weekdays.map { Calendar.current.shortWeekdaySymbols[$0 - 1] }.joined(separator: ", "))
+                            .font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                    }
+                    Text(routine.exercises.prefix(3).map { store.name($0.exerciseID) }.joined(separator: " · "))
+                        .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                    Button {
+                        if store.data.active != nil { pendingStart = routine }
+                        else { store.start(routine); onStart() }
+                    } label: { Label("Start workout", systemImage: "play.fill").frame(maxWidth: .infinity) }
+                        .buttonStyle(RepbookPrimaryStyle())
+                }.padding(.vertical, 12)
             }
-        }.navigationTitle("History")
+        }.navigationTitle("Routines").searchable(text: $query, prompt: "Find a routine")
+        .toolbar { Button { editor = Routine(name: "New routine") } label: { Image(systemName: "plus") }.accessibilityLabel("New routine") }
+        .sheet(item: $editor) { RoutineEditor(draft: $0) }
+        .sheet(isPresented: $scheduling) { ScheduleSheet() }
+        .confirmationDialog("Delete this routine?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), titleVisibility: .visible) {
+            Button("Delete routine", role: .destructive) {
+                guard let id = pendingDelete?.id else { return }
+                store.change {
+                    $0.routines.removeAll { $0.id == id }
+                    $0.weekdayRoutines = $0.weekdayRoutines?.filter { $0.value != id }
+                }
+                pendingDelete = nil
+            }
+        }
+        .confirmationDialog("A workout is already in progress", isPresented: Binding(get: { pendingStart != nil }, set: { if !$0 { pendingStart = nil } })) {
+            Button("Resume workout") { pendingStart = nil; onStart() }
+            Button("Cancel", role: .cancel) { pendingStart = nil }
+        }
     }
 }
 
@@ -333,27 +157,64 @@ struct SettingsView: View {
     @State private var pending: Data?
     @State private var confirmImport = false
     @State private var document = BackupDocument(data: Data())
+    @State private var scheduling = false
+    @State private var csvImporting = false
+    @State private var csvResult: HevyImportResult?
+    @State private var csvConfirm = false
+    @State private var csvMessage: String?
+    @AppStorage("appearance") private var appearance = "system"
+    @AppStorage("haptics") private var haptics = true
+    @AppStorage("restNotifications") private var restNotifications = false
+    @AppStorage("weightIncrement") private var weightIncrement = 0.0
+    @AppStorage("repIncrement") private var repIncrement = 1
     var body: some View {
         Form {
-            Section("Workout") {
-                Picker("Weight unit", selection: Binding(get: { store.data.unit }, set: { unit in store.change { $0.convertUnit(to: unit) } })) {
-                    Text("Pounds").tag("lbs"); Text("Kilograms").tag("kg")
+            Section("Appearance") {
+                Picker("Appearance", selection: $appearance) {
+                    Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark")
                 }
-                Stepper("Rest timer: \(store.data.restSeconds) seconds", value: Binding(get: { store.data.restSeconds }, set: { value in store.change { $0.restSeconds = value } }), in: 0...600, step: 15)
             }
-            Section("Your data") {
-                Button("Import Repbook backup") { importing = true }
-                Button("Export backup") {
-                    do { document = BackupDocument(data: try store.exportBackup()); exporting = true }
-                    catch { store.error = error.localizedDescription }
-                }
-                Text("To move your web workouts here, export JSON from the web app, then import that file. Import replaces the data in this app.").font(.caption).foregroundStyle(.secondary)
+            Section("Preferences") {
+                NavigationLink("Workout & sets") { workoutPreferences }
+                NavigationLink("Notifications & feedback") { feedbackPreferences }
+                Button("Weekly schedule") { scheduling = true }
             }
-            Section("Lock Screen & Home Screen") {
-                Text("Start a workout to show a Live Activity. Use its buttons to adjust weight or reps and log the current set.")
-                Text("Add the Scheduled workout widget to your Home Screen. Hold it and choose Edit Widget to enter the exact routine name for each day. Leave a day blank for rest. Tap the blue arrow to start today's routine and Live Activity without opening Repbook.").font(.caption).foregroundStyle(.secondary)
+            Section("Data") { NavigationLink("Import, export & backups") { dataPreferences } }
+            Section("Widgets & Live Activities") {
+                Text("Start a workout to show a Live Activity. Use its controls to adjust weight, reps, and log the current set.").font(.subheadline)
+                Text("Hold a Scheduled workout widget and choose Edit Widget to set its weekly routine names. The barbell Lock Screen widget uses the same setup.").font(.caption).foregroundStyle(.secondary)
+            }
+            Section("About") {
+                LabeledContent("Version", value: "0.9.0 (10)")
+                Text("Workouts are stored on this device. Export a backup before removing the app.").font(.caption).foregroundStyle(.secondary)
             }
         }.navigationTitle("Settings")
+        .sheet(isPresented: $scheduling) { ScheduleSheet() }
+        .fileImporter(isPresented: $csvImporting, allowedContentTypes: [.commaSeparatedText, .plainText]) { result in
+            do {
+                let url = try result.get(); let access = url.startAccessingSecurityScopedResource()
+                defer { if access { url.stopAccessingSecurityScopedResource() } }
+                csvResult = try HevyCSVImporter.merge(String(contentsOf: url, encoding: .utf8), into: store.data)
+                csvConfirm = true
+            } catch { store.error = error.localizedDescription }
+        }
+        .confirmationDialog("Import Hevy workouts?", isPresented: $csvConfirm, titleVisibility: .visible) {
+            Button("Import \(csvResult?.imported ?? 0) workouts") {
+                guard let result = csvResult else { return }
+                // Re-merge is unnecessary here: do not overwrite a set logged since the preview.
+                let existing = Set(store.data.workouts.map(\.id))
+                let new = result.data.workouts.filter { !existing.contains($0.id) }
+                store.change { data in
+                    let ids = Set(data.exercises.map(\.id))
+                    data.exercises.append(contentsOf: result.data.exercises.filter { !ids.contains($0.id) })
+                    data.workouts.append(contentsOf: new)
+                    data.recalculateVolumeRecords()
+                }
+                csvMessage = "Imported \(new.count) workouts; skipped \(result.skipped) duplicates. CSV times use this device’s time zone."
+                csvResult = nil
+            }
+            Button("Cancel", role: .cancel) { csvResult = nil }
+        } message: { Text("Adds history without replacing your routines or active workout. Times use this device’s time zone.") }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
             do {
                 let url = try result.get(); let access = url.startAccessingSecurityScopedResource()
@@ -374,6 +235,53 @@ struct SettingsView: View {
             if case .failure(let error) = result { store.error = error.localizedDescription }
         }
     }
+    private var workoutPreferences: some View {
+        Form {
+            Section("Workout") {
+                Picker("Weight unit", selection: Binding(get: { store.data.unit }, set: { unit in store.change { $0.convertUnit(to: unit) } })) {
+                    Text("Pounds").tag("lbs"); Text("Kilograms").tag("kg")
+                }
+                Stepper("Rest timer: \(store.data.restSeconds) seconds", value: Binding(get: { store.data.restSeconds }, set: { seconds in store.change { $0.restSeconds = seconds } }), in: 0...600, step: 15)
+            }
+            Section("Set increments") {
+                Picker("Weight", selection: $weightIncrement) {
+                    Text("Automatic for unit").tag(0.0)
+                    ForEach([0.5, 1, 1.25, 2.5, 5, 10], id: \.self) { Text("\($0.formatted()) \(store.data.unit)").tag($0) }
+                }
+                Stepper("Reps: \(repIncrement)", value: $repIncrement, in: 1...10)
+            }
+        }.navigationTitle("Workout & sets").navigationBarTitleDisplayMode(.inline)
+    }
+    private var feedbackPreferences: some View {
+        Form {
+            Toggle("Haptics", isOn: $haptics)
+            Toggle("Rest completion notification", isOn: $restNotifications)
+                .onChange(of: restNotifications) { _, enabled in
+                    if enabled {
+                        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                            DispatchQueue.main.async { restNotifications = granted; store.updateRestNotification() }
+                        }
+                    } else { store.updateRestNotification() }
+                }
+        }.navigationTitle("Feedback").navigationBarTitleDisplayMode(.inline)
+    }
+    private var dataPreferences: some View {
+        Form {
+            Section("Import") {
+                Button("Import Hevy CSV") { csvImporting = true }
+                if let csvMessage { Text(csvMessage).font(.caption).foregroundStyle(.secondary) }
+                Button("Restore Repbook backup") { importing = true }
+                Text("Hevy import adds history and skips matching sessions. Restoring a backup replaces the current data after confirmation.").font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Export") {
+                Button("Export backup") {
+                    do { document = BackupDocument(data: try store.exportBackup()); exporting = true }
+                    catch { store.error = error.localizedDescription }
+                }
+            }
+        }.navigationTitle("Your data").navigationBarTitleDisplayMode(.inline)
+    }
+
 }
 
 struct SettingsSheet: View {
@@ -383,56 +291,5 @@ struct SettingsSheet: View {
             SettingsView()
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
-    }
-}
-
-private extension View {
-    func selectAllOnTap() -> some View {
-        simultaneousGesture(TapGesture().onEnded {
-            DispatchQueue.main.async {
-                UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil)
-            }
-        })
-    }
-}
-
-private struct KeyboardDismissTap: UIViewRepresentable {
-    func makeCoordinator() -> Coordinator { Coordinator() }
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        DispatchQueue.main.async { context.coordinator.install(from: view) }
-        return view
-    }
-    func updateUIView(_ uiView: UIView, context: Context) {
-        DispatchQueue.main.async { context.coordinator.install(from: uiView) }
-    }
-    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) { coordinator.remove() }
-
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        weak var window: UIWindow?
-        var recognizer: UITapGestureRecognizer?
-
-        func install(from view: UIView) {
-            guard recognizer == nil, let window = view.window else { return }
-            let recognizer = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
-            recognizer.cancelsTouchesInView = false
-            recognizer.delegate = self
-            window.addGestureRecognizer(recognizer)
-            self.window = window
-            self.recognizer = recognizer
-        }
-        func remove() {
-            if let recognizer { window?.removeGestureRecognizer(recognizer) }
-            recognizer = nil
-        }
-        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-            var view: UIView? = touch.view
-            while let current = view {
-                if current is UITextField { return false }
-                view = current.superview
-            }
-            return true
-        }
-        @objc private func dismissKeyboard() { window?.endEditing(true) }
     }
 }
