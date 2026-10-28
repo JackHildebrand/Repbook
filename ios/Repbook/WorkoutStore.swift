@@ -37,7 +37,7 @@ final class WorkoutStore: ObservableObject {
     private var restKey: String?
 
     private init() {
-        UserDefaults.standard.register(defaults: ["restNotifications": true])
+        UserDefaults.standard.register(defaults: ["restLiveActivityAlerts": true])
         let testing = ProcessInfo.processInfo.arguments.contains("-repbook-ui-testing")
         url = URL.applicationSupportDirectory.appending(path: testing ? "RepbookUITests/data.json" : "Repbook/data.json")
         if testing && ProcessInfo.processInfo.arguments.contains("-repbook-reset-test-data") { try? FileManager.default.removeItem(at: url) }
@@ -85,11 +85,7 @@ final class WorkoutStore: ObservableObject {
     func start(_ routine: Routine) {
         guard data.active == nil else { return }
         change { $0.active = $0.starting(routine) }
-        if UIApplication.shared.applicationState == .active && !ProcessInfo.processInfo.arguments.contains("-repbook-ui-testing") && UserDefaults.standard.bool(forKey: "restNotifications") {
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] _, _ in
-                Task { @MainActor in self?.updateRestNotification() }
-            }
-        }
+
     }
 
     func showLiveActivity() {
@@ -167,7 +163,7 @@ final class WorkoutStore: ObservableObject {
         if data.active?.exercises[ei].sets[si].done == true {
             feedback(pr: records.volume)
         }
-        updateRestNotification()
+        cancelLegacyRestNotifications()
     }
 
     func feedback(pr: Bool = false) {
@@ -181,19 +177,13 @@ final class WorkoutStore: ObservableObject {
             guard let end = $0.active?.restUntil else { return }
             $0.active?.restUntil = max(Date(), end.addingTimeInterval(Double(seconds)))
         }
-        updateRestNotification()
+        cancelLegacyRestNotifications()
     }
 
-    func updateRestNotification() {
+    func cancelLegacyRestNotifications() {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: ["repbook-rest"])
-        guard UserDefaults.standard.bool(forKey: "restNotifications"), let end = data.active?.restUntil,
-              end.timeIntervalSinceNow > 0 else { return }
-        let content = UNMutableNotificationContent()
-        content.title = "Rest complete"; content.body = "Ready for your next set."; content.sound = .default
-        let request = UNNotificationRequest(identifier: "repbook-rest", content: content,
-            trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(1, end.timeIntervalSinceNow), repeats: false))
-        center.add(request)
+        center.removeDeliveredNotifications(withIdentifiers: ["repbook-rest"])
     }
 
     func adjustCurrent(sessionID: String, setID: String, weight: Double, reps: Int) async {
@@ -242,12 +232,13 @@ final class WorkoutStore: ObservableObject {
                   self.data.active?.restUntil == end else { return }
             // Suspension may delay this task. Refresh overdue state without replaying an old alert.
             let recent = Date().timeIntervalSince(end) < 10
-            if recent && UIApplication.shared.applicationState == .active { self.feedback() }
+            if recent && UserDefaults.standard.bool(forKey: "restLiveActivityAlerts") && UIApplication.shared.applicationState == .active { self.feedback() }
             self.enqueueActivityUpdate(restAlert: recent)
         }
     }
 
     func scheduleActivityUpdate() {
+        cancelLegacyRestNotifications()
         scheduleRestCompletion()
         enqueueActivityUpdate(restAlert: false)
     }
@@ -292,8 +283,8 @@ final class WorkoutStore: ObservableObject {
             loggedPR: session.exercises.flatMap(\.sets).first(where: { $0.id == session.lastLoggedSetID }).map { $0.done && $0.volumePR == true })
         var completedState = state
         completedState.restComplete = session.restUntil.map { $0 <= Date() } ?? false
-        let content = ActivityContent(state: completedState, staleDate: session.restUntil)
-        let alert: AlertConfiguration? = restAlert && completedState.restComplete == true
+        let content = ActivityContent(state: completedState, staleDate: session.restUntil, relevanceScore: completedState.restComplete == true ? 1.0 : 0.0)
+        let alert: AlertConfiguration? = restAlert && completedState.restComplete == true && UserDefaults.standard.bool(forKey: "restLiveActivityAlerts")
             ? AlertConfiguration(title: "Rest complete", body: "Ready for your next set", sound: .default) : nil
         for activity in Activity<WorkoutAttributes>.activities where activity.attributes.sessionID != session.id {
             await activity.end(nil, dismissalPolicy: .immediate)

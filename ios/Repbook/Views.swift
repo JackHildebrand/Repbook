@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
-import UserNotifications
 
 struct RootView: View {
     @EnvironmentObject private var store: WorkoutStore
@@ -164,7 +163,7 @@ struct SettingsView: View {
     @State private var csvMessage: String?
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("haptics") private var haptics = true
-    @AppStorage("restNotifications") private var restNotifications = true
+    @AppStorage("restLiveActivityAlerts") private var restLiveActivityAlerts = true
     @AppStorage("weightIncrement") private var weightIncrement = 0.0
     @AppStorage("repIncrement") private var repIncrement = 1
     var body: some View {
@@ -255,14 +254,11 @@ struct SettingsView: View {
     private var feedbackPreferences: some View {
         Form {
             Toggle("Haptics", isOn: $haptics)
-            Toggle("Rest completion notification", isOn: $restNotifications)
-                .onChange(of: restNotifications) { _, enabled in
-                    if enabled {
-                        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
-                            DispatchQueue.main.async { restNotifications = granted; store.updateRestNotification() }
-                        }
-                    } else { store.updateRestNotification() }
-                }
+            Section {
+                Toggle("Live Activity rest alerts", isOn: $restLiveActivityAlerts)
+            } footer: {
+                Text("Rest completion alerts come from your workout Live Activity. iOS controls Dynamic Island presentation and background delivery.")
+            }
         }.navigationTitle("Feedback").navigationBarTitleDisplayMode(.inline)
     }
     private var dataPreferences: some View {
