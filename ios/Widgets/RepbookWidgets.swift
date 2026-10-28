@@ -128,7 +128,7 @@ struct WorkoutLiveActivity: Widget {
                         Text("\(context.state.label) · \(context.state.progress)").font(.caption2).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if context.state.restComplete == true {
+                    if context.isRestComplete {
                         Label("Ready", systemImage: "checkmark.circle.fill").font(.caption.weight(.semibold)).foregroundStyle(.green)
                     } else if let end = context.state.restUntil {
                         VStack(alignment: .trailing, spacing: 1) {
@@ -146,15 +146,15 @@ struct WorkoutLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    if context.state.restComplete != true {
+                    if !context.isRestComplete {
                         Label(context.attributes.name, systemImage: "dumbbell.fill").font(.caption).foregroundStyle(.primary)
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    if context.state.restComplete != true { ActivityTopTimer(context: context) }
+                    if !context.isRestComplete { ActivityTopTimer(context: context) }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    if context.state.restComplete == true {
+                    if context.isRestComplete {
                         RestCompleteMark(size: 44).frame(maxWidth: .infinity, minHeight: 64)
                     } else {
                     VStack(alignment: .leading, spacing: 8) {
@@ -171,7 +171,7 @@ struct WorkoutLiveActivity: Widget {
                     }
                 }
             } compactLeading: {
-                if context.state.restComplete == true {
+                if context.isRestComplete {
                     RestCompleteMark(size: 26)
                 } else if let end = context.state.restUntil {
                     IslandRestCountdown(started: context.attributes.started, end: end)
@@ -181,11 +181,11 @@ struct WorkoutLiveActivity: Widget {
             } compactTrailing: {
                 // Keep the trailing region empty during rest so reduced-width presentations
                 // devote the available space to a single complete m:ss countdown.
-                if context.state.restComplete != true && context.state.restUntil == nil {
+                if !context.isRestComplete && context.state.restUntil == nil {
                     Text(context.attributes.started, style: .timer).font(.caption).monospacedDigit().frame(width: 45)
                 }
             } minimal: {
-                if context.state.restComplete == true {
+                if context.isRestComplete {
                     RestCompleteMark(size: 26)
                 } else if let end = context.state.restUntil {
                     IslandRestCountdown(started: context.attributes.started, end: end)
@@ -267,7 +267,7 @@ struct ActivityTopTimer: View {
                 Text(context.attributes.started, style: .timer)
                     .frame(width: 64, alignment: .trailing)
             }
-            if context.state.restComplete == true {
+            if context.isRestComplete {
                 Label("Rest complete", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
             } else if let end = context.state.restUntil {
                 HStack(spacing: 4) {
@@ -301,5 +301,14 @@ struct RoutineLauncher: Widget {
                 .widgetURL(URL(string: "repbook://workout"))
         }.configurationDisplayName("Repbook").description("Open your routines or resume your workout.")
             .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+
+private extension ActivityViewContext where Attributes == WorkoutAttributes {
+    var isRestComplete: Bool {
+        guard let deadline = state.restUntil else { return false }
+        // staleDate is the rest deadline. iOS can invalidate this view without
+        // waiting for the suspended app to send a new ContentState.
+        return state.restComplete == true || isStale || deadline <= Date()
     }
 }
