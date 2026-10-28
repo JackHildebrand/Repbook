@@ -133,6 +133,19 @@ final class WorkoutStore: ObservableObject {
         if data.active == nil { completedSession = session }
     }
 
+    func finishFromLiveActivity(sessionID: String) async throws {
+        // Ignore repeated taps or actions from a previous session.
+        guard let session = data.active, session.id == sessionID else { return }
+        guard session.nextSet == nil, session.completedSets > 0 else { return }
+        finish()
+        guard data.active?.id != sessionID else {
+            throw NSError(domain: "Repbook.FinishWorkout", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: error ?? "Could not save the workout. Please try again."])
+        }
+        // Wait until ActivityKit has dismissed the activity before the intent completes.
+        await activityTask?.value
+    }
+
     private func historicalSets(for exerciseID: String) -> [WorkoutSet] {
         data.workouts.flatMap { workout in
             workout.exercises.filter { $0.exerciseID == exerciseID }.flatMap(\.sets)
@@ -277,7 +290,7 @@ final class WorkoutStore: ObservableObject {
         } else { progress = "" }
         let state = WorkoutAttributes.ContentState(
             exercise: next.map { name(session.exercises[$0.exercise].exerciseID) } ?? "All sets logged",
-            setID: set?.id ?? "", label: next.map { "\(set?.warmup == true ? "Warmup" : "Set") \($0.set + 1)" } ?? "Finish in Repbook",
+            setID: set?.id ?? "", label: next.map { "\(set?.warmup == true ? "Warmup" : "Set") \($0.set + 1)" } ?? "Ready to finish",
             progress: progress, weight: set?.weight ?? 0, reps: set?.reps ?? 0, unit: data.unit,
             restUntil: session.restUntil, finished: next == nil,
             loggedPR: session.exercises.flatMap(\.sets).first(where: { $0.id == session.lastLoggedSetID }).map { $0.done && $0.volumePR == true })

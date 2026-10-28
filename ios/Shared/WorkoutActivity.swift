@@ -108,3 +108,19 @@ struct LogSetIntent: LiveActivityIntent {
         return .result()
     }
 }
+
+struct FinishWorkoutIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Finish workout"
+    static var description = IntentDescription("Saves the completed Repbook workout and ends its Live Activity.")
+    static var openAppWhenRun = false
+    static var isDiscoverable = false
+    @Parameter(title: "Session") var sessionID: String
+    init() {}
+    init(sessionID: String) { self.sessionID = sessionID }
+    func perform() async throws -> some IntentResult {
+        #if !WIDGET_EXTENSION
+        try await WorkoutStore.shared.finishFromLiveActivity(sessionID: sessionID)
+        #endif
+        return .result()
+    }
+}

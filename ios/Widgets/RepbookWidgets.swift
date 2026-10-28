@@ -138,7 +138,7 @@ struct WorkoutLiveActivity: Widget {
                     }
                     if context.state.loggedPR == true { Image(systemName: "medal.fill").foregroundStyle(.green).accessibilityLabel("Volume PR logged") }
                 }
-                if context.state.finished { Text("All sets logged. Open Repbook to finish.").font(.caption) }
+                if context.state.finished { FinishWorkoutButton(sessionID: context.attributes.sessionID) }
                 else { SetControls(context: context) }
             }.padding(.horizontal, 16).padding(.vertical, 12).foregroundStyle(.white)
                 .activityBackgroundTint(Color.black.opacity(0.9)).activitySystemActionForegroundColor(.white)
@@ -154,7 +154,9 @@ struct WorkoutLiveActivity: Widget {
                     if !context.isRestComplete { ActivityTopTimer(context: context) }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    if context.isRestComplete {
+                    if context.state.finished {
+                        FinishWorkoutButton(sessionID: context.attributes.sessionID)
+                    } else if context.isRestComplete {
                         RestCompleteMark(size: 44).frame(maxWidth: .infinity, minHeight: 64)
                     } else {
                     VStack(alignment: .leading, spacing: 8) {
@@ -165,7 +167,7 @@ struct WorkoutLiveActivity: Widget {
                         }
                         if !context.state.finished {
                             Text("\(context.state.weight.formatted()) \(context.state.unit) × \(context.state.reps) reps").font(.subheadline).monospacedDigit()
-                        } else { Text("Open Repbook to finish").font(.caption) }
+                        } else { FinishWorkoutButton(sessionID: context.attributes.sessionID) }
                         if context.state.loggedPR == true { Label("Volume PR logged", systemImage: "medal.fill").font(.caption.bold()).foregroundStyle(.green) }
                     }
                     }
@@ -195,6 +197,20 @@ struct WorkoutLiveActivity: Widget {
             }
             .widgetURL(URL(string: "repbook://workout"))
         }
+    }
+}
+
+struct FinishWorkoutButton: View {
+    let sessionID: String
+    var body: some View {
+        Button(intent: FinishWorkoutIntent(sessionID: sessionID)) {
+            Label("Finish workout", systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .foregroundStyle(.black).background(.white, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Save this completed workout and dismiss the Live Activity")
     }
 }
 
