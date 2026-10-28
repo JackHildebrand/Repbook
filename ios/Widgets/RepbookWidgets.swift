@@ -165,15 +165,45 @@ struct WorkoutLiveActivity: Widget {
                     }
                 }
             } compactLeading: {
-                Image(systemName: context.state.restComplete == true ? "checkmark.circle.fill" : "dumbbell.fill").foregroundStyle(context.state.restComplete == true ? Color.green : Color.blue)
+                if context.state.restComplete == true {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Rest complete")
+                } else if let end = context.state.restUntil {
+                    IslandRestCountdown(started: context.attributes.started, end: end)
+                } else {
+                    Image(systemName: "dumbbell.fill").foregroundStyle(.blue)
+                }
             } compactTrailing: {
-                if context.state.restComplete == true { Text("Ready").font(.caption.weight(.semibold)).foregroundStyle(.green) }
-                else if let end = context.state.restUntil {
-                    Text(timerInterval: min(context.attributes.started, end)...end, countsDown: true).monospacedDigit().frame(width: 45)
-                } else { Text(context.attributes.started, style: .timer).font(.caption).monospacedDigit().frame(width: 45) }
-            } minimal: { Image(systemName: context.state.restComplete == true ? "checkmark.circle.fill" : "dumbbell.fill").foregroundStyle(context.state.restComplete == true ? Color.green : Color.blue) }
+                // Keep the trailing region empty during rest so reduced-width presentations
+                // devote the available space to a single complete m:ss countdown.
+                if context.state.restUntil == nil {
+                    Text(context.attributes.started, style: .timer).font(.caption).monospacedDigit().frame(width: 45)
+                }
+            } minimal: {
+                if context.state.restComplete == true {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Rest complete")
+                } else if let end = context.state.restUntil {
+                    IslandRestCountdown(started: context.attributes.started, end: end)
+                } else {
+                    Image(systemName: "dumbbell.fill").foregroundStyle(.blue)
+                }
+            }
             .widgetURL(URL(string: "repbook://workout"))
         }
+    }
+}
+
+struct IslandRestCountdown: View {
+    let started: Date
+    let end: Date
+    var body: some View {
+        // A system-driven countdown spans the original deadline, including full minutes.
+        // No per-second app updates or separate 60-second phases are required.
+        Text(timerInterval: min(started, end)...end, countsDown: true, showsHours: false)
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .monospacedDigit().multilineTextAlignment(.center)
+            .lineLimit(1).minimumScaleFactor(0.7)
+            .frame(width: 36)
+            .accessibilityLabel("Rest remaining")
     }
 }
 
