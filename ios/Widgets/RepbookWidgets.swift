@@ -146,12 +146,17 @@ struct WorkoutLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    if context.state.restComplete == true {
-                        Label("Rest complete", systemImage: "checkmark.circle.fill").font(.caption.weight(.semibold)).foregroundStyle(.green)
-                    } else { Label(context.attributes.name, systemImage: "dumbbell.fill").font(.caption).foregroundStyle(.primary) }
+                    if context.state.restComplete != true {
+                        Label(context.attributes.name, systemImage: "dumbbell.fill").font(.caption).foregroundStyle(.primary)
+                    }
                 }
-                DynamicIslandExpandedRegion(.trailing) { ActivityTopTimer(context: context) }
+                DynamicIslandExpandedRegion(.trailing) {
+                    if context.state.restComplete != true { ActivityTopTimer(context: context) }
+                }
                 DynamicIslandExpandedRegion(.bottom) {
+                    if context.state.restComplete == true {
+                        RestCompleteMark(size: 44).frame(maxWidth: .infinity, minHeight: 64)
+                    } else {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text(context.state.exercise).font(.headline).lineLimit(1)
@@ -163,10 +168,11 @@ struct WorkoutLiveActivity: Widget {
                         } else { Text("Open Repbook to finish").font(.caption) }
                         if context.state.loggedPR == true { Label("Volume PR logged", systemImage: "medal.fill").font(.caption.bold()).foregroundStyle(.green) }
                     }
+                    }
                 }
             } compactLeading: {
                 if context.state.restComplete == true {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Rest complete")
+                    RestCompleteMark(size: 26)
                 } else if let end = context.state.restUntil {
                     IslandRestCountdown(started: context.attributes.started, end: end)
                 } else {
@@ -175,12 +181,12 @@ struct WorkoutLiveActivity: Widget {
             } compactTrailing: {
                 // Keep the trailing region empty during rest so reduced-width presentations
                 // devote the available space to a single complete m:ss countdown.
-                if context.state.restUntil == nil {
+                if context.state.restComplete != true && context.state.restUntil == nil {
                     Text(context.attributes.started, style: .timer).font(.caption).monospacedDigit().frame(width: 45)
                 }
             } minimal: {
                 if context.state.restComplete == true {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Rest complete")
+                    RestCompleteMark(size: 26)
                 } else if let end = context.state.restUntil {
                     IslandRestCountdown(started: context.attributes.started, end: end)
                 } else {
@@ -189,6 +195,16 @@ struct WorkoutLiveActivity: Widget {
             }
             .widgetURL(URL(string: "repbook://workout"))
         }
+    }
+}
+
+struct RestCompleteMark: View {
+    var size: CGFloat
+    var body: some View {
+        Image(systemName: "checkmark.circle.fill")
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(.green)
+            .accessibilityLabel("Rest complete")
     }
 }
 
