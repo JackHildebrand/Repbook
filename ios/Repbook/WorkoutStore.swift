@@ -297,6 +297,8 @@ final class WorkoutStore: ObservableObject {
         var completedState = state
         completedState.restComplete = session.restUntil.map { $0 <= Date() } ?? false
         let content = ActivityContent(state: completedState, staleDate: session.restUntil, relevanceScore: completedState.restComplete == true ? 1.0 : 0.0)
+        // Ask iOS to draw attention to rest completion through the Live Activity.
+        // The system controls the Island presentation; no separate notification is sent.
         let alert: AlertConfiguration? = restAlert && completedState.restComplete == true && UserDefaults.standard.bool(forKey: "restLiveActivityAlerts")
             ? AlertConfiguration(title: "Rest complete", body: "Ready for your next set", sound: .default) : nil
         for activity in Activity<WorkoutAttributes>.activities where activity.attributes.sessionID != session.id {

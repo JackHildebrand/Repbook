@@ -129,7 +129,7 @@ struct WorkoutLiveActivity: Widget {
                     }
                     Spacer()
                     if context.isRestComplete {
-                        Label("Ready", systemImage: "checkmark.circle.fill").font(.caption.weight(.semibold)).foregroundStyle(.green)
+                        RestCompleteMark(size: 28).fixedSize()
                     } else if let end = context.state.restUntil {
                         VStack(alignment: .trailing, spacing: 1) {
                             Text("REST").font(.system(size: 9)).foregroundStyle(.secondary)
