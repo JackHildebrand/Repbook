@@ -106,6 +106,10 @@ struct ActiveWorkoutView: View {
         let currentIndex = next?.exercise == ei ? next?.set : nil
         return VStack(alignment: .leading, spacing: 16) {
             Button {
+                if !isExpanded, next?.exercise != ei,
+                   let set = exercise.sets.first(where: { !$0.done }) {
+                    store.change { $0.active?.focusedSetID = set.id }
+                }
                 withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85)) { expanded = isExpanded ? nil : exercise.id }
             } label: {
                 HStack(alignment: .top) {

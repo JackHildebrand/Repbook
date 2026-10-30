@@ -53,13 +53,15 @@ struct Session: Codable, Identifiable, Equatable {
     var completedSets: Int { exercises.flatMap(\.sets).filter(\.done).count }
     var volume: Double { exercises.flatMap(\.sets).filter { $0.done && !$0.warmup }.reduce(0) { $0 + $1.weight * Double($1.reps) } }
     var nextSet: (exercise: Int, set: Int)? {
-        if let focusedSetID {
-            for (ei, exercise) in exercises.enumerated() {
-                if let si = exercise.sets.firstIndex(where: { $0.id == focusedSetID && !$0.done }) { return (ei, si) }
-            }
+        let order = exercises.indices.flatMap { ei in
+            exercises[ei].sets.indices.map { si in (exercise: ei, set: si) }
         }
-        for (ei, exercise) in exercises.enumerated() {
-            if let si = exercise.sets.firstIndex(where: { !$0.done }) { return (ei, si) }
+        // Keep the manual selection as an anchor even after it is logged.
+        // Continue forward from there, then wrap around to any skipped sets.
+        let start = order.firstIndex { exercises[$0.exercise].sets[$0.set].id == focusedSetID } ?? 0
+        for offset in order.indices {
+            let index = order[(start + offset) % order.count]
+            if !exercises[index.exercise].sets[index.set].done { return index }
         }
         return nil
     }

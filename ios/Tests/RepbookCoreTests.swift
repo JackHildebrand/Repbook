@@ -129,18 +129,41 @@ extension RepbookCoreTests {
         XCTAssertNil(try BackupImporter.decode(JSONSerialization.data(withJSONObject: old)).weekdayRoutines)
     }
 
-    func testFocusedSetResumesAndAdvancesWhenLogged() {
-        var data = RepbookData.seed()
+    func testManualExerciseSelectionAdvancesAndWrapsSkippedExercises() throws {
+        let data = RepbookData.seed()
         var session = data.starting(data.routines[0])
-        let target = session.exercises[1].sets[1].id
-        session.focusedSetID = target
+        session.focusedSetID = session.exercises[1].sets[0].id
         XCTAssertEqual(session.nextSet?.exercise, 1)
+        for si in session.exercises[1].sets.indices {
+            XCTAssertEqual(session.nextSet?.exercise, 1)
+            XCTAssertEqual(session.nextSet?.set, si)
+            session.exercises[1].sets[si].done = true
+        }
+        XCTAssertEqual(session.nextSet?.exercise, 2)
+        // Selection survives termination/relaunch through Codable persistence.
+        session = try JSONDecoder().decode(Session.self, from: JSONEncoder().encode(session))
+        XCTAssertEqual(session.nextSet?.exercise, 2)
+        for ei in session.exercises.indices where ei >= 2 {
+            for si in session.exercises[ei].sets.indices { session.exercises[ei].sets[si].done = true }
+        }
+        XCTAssertEqual(session.nextSet?.exercise, 0)
+        // A new manual selection replaces the previous anchor immediately.
+        session.focusedSetID = session.exercises[0].sets[1].id
         XCTAssertEqual(session.nextSet?.set, 1)
-        session.exercises[1].sets[1].done = true
+        for ei in session.exercises.indices {
+            for si in session.exercises[ei].sets.indices { session.exercises[ei].sets[si].done = true }
+        }
+        XCTAssertNil(session.nextSet)
+    }
+
+    func testMissingFocusAndEmptySessionUseSafeFallback() {
+        let data = RepbookData.seed()
+        var session = data.starting(data.routines[0])
+        session.focusedSetID = "deleted-set"
         XCTAssertEqual(session.nextSet?.exercise, 0)
         XCTAssertEqual(session.nextSet?.set, 0)
-        data.active = session
-        XCTAssertNoThrow(try data.validate())
+        session.exercises = []
+        XCTAssertNil(session.nextSet)
     }
 
     func testHevyCSVImportIsAtomicDeduplicatedAndConvertsUnits() throws {
