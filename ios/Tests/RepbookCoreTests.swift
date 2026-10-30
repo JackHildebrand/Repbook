@@ -2,6 +2,33 @@ import XCTest
 @testable import RepbookCore
 
 final class RepbookCoreTests: XCTestCase {
+    func testWeeklyMusclesUseSevenCalendarDaysAndLoggedWorkingSets() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 30, hour: 12))!
+        let start = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now))!
+        let chest = Exercise(name: "Chest Press (Machine)")
+        let custom = Exercise(name: "Custom lift", muscleGroup: "Glutes")
+        func session(_ date: Date, _ id: String, _ sets: [WorkoutSet]) -> Session {
+            Session(name: "Test", started: date, exercises: [SessionExercise(exerciseID: id, sets: sets)])
+        }
+        let working = WorkoutSet(weight: 100, reps: 8, done: true)
+        var data = RepbookData(exercises: [chest, custom], routines: [], workouts: [
+            session(start, chest.id, [working, WorkoutSet(warmup: true, done: true), WorkoutSet(done: false)]),
+            session(start.addingTimeInterval(-1), chest.id, [working]),
+            session(now, custom.id, [working, working]),
+            session(now.addingTimeInterval(1), chest.id, [working]),
+            session(now, "missing-exercise", [working])
+        ])
+        data.active = session(now, chest.id, [working])
+        let activity = data.weeklyMuscleActivity(now: now, calendar: calendar)
+        XCTAssertEqual(activity.start, start)
+        XCTAssertEqual(activity.sets, ["Chest": 1, "Glutes": 2, "Unassigned": 1])
+        XCTAssertEqual(activity.trainedGroups, ["Chest", "Glutes"])
+        data.workouts = []
+        XCTAssertTrue(data.weeklyMuscleActivity(now: now, calendar: calendar).sets.isEmpty)
+    }
+
     func testProgressionExcludesWarmupsAndAggregatesWorkingSets() throws {
         let date = Date()
         let exercise = Exercise(name: "Row")

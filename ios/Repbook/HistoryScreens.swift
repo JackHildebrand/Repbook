@@ -16,6 +16,9 @@ struct HistoryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 calendar.repbookCard()
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    WeeklyMuscleMap(activity: store.data.weeklyMuscleActivity(now: context.date))
+                }
                 HStack {
                     Text(selectedDay == nil ? "Recent workouts" : selectedDay!.formatted(.dateTime.month(.abbreviated).day())).font(.title3.weight(.semibold))
                     Spacer()
