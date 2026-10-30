@@ -23,6 +23,15 @@ struct RootView: View {
             if UserDefaults.standard.object(forKey: "haptics") as? Bool ?? true { UISelectionFeedbackGenerator().selectionChanged() }
         }
         .onOpenURL { _ in openWorkout() }
+        .task(id: store.data.active?.id) {
+            if store.data.active != nil { await RestNotifications.shared.requestPermissionIfNeeded() }
+        }
+        .task(id: store.notificationSessionID) {
+            if let id = store.notificationSessionID {
+                if store.data.active?.id == id { openWorkout() }
+                store.notificationSessionID = nil
+            }
+        }
         .fullScreenCover(isPresented: $workout, onDismiss: { if store.completedSession != nil { summary = true } }) {
             NavigationStack { ActiveWorkoutView(onMinimize: { workout = false }) }
                 .environmentObject(store)
@@ -38,6 +47,7 @@ struct RootView: View {
     }
     private func openWorkout() {
         guard store.data.active != nil else { selected = 0; return }
+        RestNotifications.shared.clearDelivered()
         store.currentSetNavigation = UUID(); workout = true
     }
     @ViewBuilder private var miniBar: some View {
@@ -163,7 +173,7 @@ struct SettingsView: View {
     @State private var csvMessage: String?
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("haptics") private var haptics = true
-    @AppStorage("restLiveActivityAlerts") private var restLiveActivityAlerts = true
+    @AppStorage("restNotifications") private var restNotifications = true
     @AppStorage("weightIncrement") private var weightIncrement = 0.0
     @AppStorage("repIncrement") private var repIncrement = 1
     var body: some View {
@@ -255,9 +265,18 @@ struct SettingsView: View {
         Form {
             Toggle("Haptics", isOn: $haptics)
             Section {
-                Toggle("Live Activity rest alerts", isOn: $restLiveActivityAlerts)
+                Toggle("Rest complete notifications", isOn: $restNotifications)
+                    .onChange(of: restNotifications) { _, enabled in
+                        Task {
+                            if enabled { await RestNotifications.shared.requestPermissionIfNeeded() }
+                            RestNotifications.shared.synchronize(session: store.data.active)
+                        }
+                    }
+                Button("iPhone notification settings") {
+                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
+                }
             } footer: {
-                Text("Rest completion alerts come from your workout Live Activity. iOS controls Dynamic Island presentation and background delivery.")
+                Text("Silent rest notifications work while you use another app. For banners only, enable Banners and disable Lock Screen and Notification Center in iPhone notification settings. Vibration and banner appearance are controlled by iOS.")
             }
         }.navigationTitle("Feedback").navigationBarTitleDisplayMode(.inline)
     }

@@ -265,7 +265,7 @@ struct RestTimerCard: View {
                             .font(.system(size: 36, weight: .semibold, design: .rounded)).monospacedDigit().frame(maxWidth: .infinity)
                         HStack(spacing: 8) {
                             Button("−15 sec") { store.adjustRest(-15) }.frame(maxWidth: .infinity, minHeight: 48).background(Color(uiColor: .tertiarySystemFill), in: Capsule())
-                            Button("Skip") { store.change { $0.active?.restUntil = nil }; store.cancelLegacyRestNotifications() }
+                            Button("Skip") { store.change { $0.active?.restUntil = nil } }
                                 .frame(maxWidth: .infinity).buttonStyle(RepbookPrimaryStyle())
                             Button("+15 sec") { store.adjustRest(15) }.frame(maxWidth: .infinity, minHeight: 48).background(Color(uiColor: .tertiarySystemFill), in: Capsule())
                         }.font(.subheadline.weight(.semibold)).buttonStyle(.plain)

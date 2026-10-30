@@ -47,3 +47,11 @@ In the currently installed web app, use Settings/Data → Export JSON. Keep the 
 - Verify installer refresh retains data and includes the extension before relying on automatic renewals.
 
 This project starts the native replacement; it does not yet have full web feature parity. Hevy CSV import, exact long-press reorder behavior, rest notifications, app icon polish, and automated sideload refresh are not implemented. Apple-platform compilation is performed by CI; device installation and behavior require an iPhone test.
+
+### Rest completion notifications
+
+Rest completion now uses a silent local notification scheduled at the stored rest deadline, independent of the app's background execution. Allow notifications when starting a workout in the app. The notification opens the matching active workout; it never starts an old session. Logging another set, changing/skipping rest, finishing/discarding, or disabling the setting clears/replaces the alert. Live Activity sound alerts are disabled to avoid duplicates.
+
+For an unlocked-phone banner only, configure Settings → Notifications → Repbook: Banners on, Lock Screen and Notification Center off, Temporary banner style. These destinations and haptics are controlled by iOS, not the app. Silent notifications do not guarantee vibration. The existing automatic Dynamic Island checkmark limitation remains; notifications do not execute app code at delivery.
+
+Device checks: schedule rest and switch apps; verify silent delivery at the deadline; tap to open the current set; adjust, skip, disable, finish, and discard before expiry and verify no stale alert; deny permission and confirm logging still works. Test Lock Screen/Notification Center destinations using the iPhone settings above.
