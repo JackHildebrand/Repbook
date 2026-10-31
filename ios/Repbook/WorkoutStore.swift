@@ -95,10 +95,9 @@ final class WorkoutStore: ObservableObject {
     }
 
     func startScheduledRoutine(named name: String) async throws {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { throw ScheduledWorkoutError.activitiesDisabled }
         if data.active == nil {
-            guard !name.isEmpty else { throw ScheduledWorkoutError.restDay }
-            guard let routine = data.routines.first(where: { $0.name.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }) else {
+            guard let routine = data.widgetRoutine(named: name) else {
+                if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw ScheduledWorkoutError.restDay }
                 throw ScheduledWorkoutError.missingRoutine
             }
             start(routine)
@@ -108,6 +107,7 @@ final class WorkoutStore: ObservableObject {
             scheduleActivityUpdate()
         }
         await activityTask?.value
+        if case .disabled = liveActivityStatus { throw ScheduledWorkoutError.activitiesDisabled }
         if case .failed(let message) = liveActivityStatus {
             throw NSError(domain: "Repbook.LiveActivity", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
         }

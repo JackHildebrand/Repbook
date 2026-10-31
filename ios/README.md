@@ -55,3 +55,9 @@ Rest completion now uses a silent local notification scheduled at the stored res
 For an unlocked-phone banner only, configure Settings → Notifications → Repbook: Banners on, Lock Screen and Notification Center off, Temporary banner style. These destinations and haptics are controlled by iOS, not the app. Silent notifications do not guarantee vibration. The existing automatic Dynamic Island checkmark limitation remains; notifications do not execute app code at delivery.
 
 Device checks: schedule rest and switch apps; verify silent delivery at the deadline; tap to open the current set; adjust, skip, disable, finish, and discard before expiry and verify no stale alert; deny permission and confirm logging still works. Test Lock Screen/Notification Center destinations using the iPhone settings above.
+
+### Widget launch recovery
+
+Widget starts first resolve today's in-app weekday assignment by routine ID (so routine renames are safe), then fall back to the widget's configured routine name. Existing sessions are resumed. Blank widget days without an app assignment do not choose an arbitrary workout. If starting the workout or its Live Activity fails, the app intent offers foreground continuation to show the error and resume any session already saved. Live Activities being disabled does not prevent the workout from being saved or resumed in the app.
+
+Physical-device checks: tap the circular Lock Screen widget on an assigned Saturday with a blank widget schedule, with a legacy widget name, after renaming a routine, with no assignment, and with Live Activities disabled. Verify the foreground recovery action and that repeated taps never replace the active session. When sideloading, retain the RepbookWidgets extension.

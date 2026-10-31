@@ -97,7 +97,6 @@ struct ScheduledRoutineLockScreenWidget: Widget {
 
 struct ScheduledRoutineLockScreenView: View {
     let entry: ScheduledRoutineEntry
-    private var name: String { entry.configuration.routine(on: entry.date) }
 
     var body: some View {
         Button(intent: StartScheduledWorkoutIntent(schedule: entry.configuration.encodedSchedule)) {
@@ -108,7 +107,7 @@ struct ScheduledRoutineLockScreenView: View {
         }
         .buttonStyle(.plain)
         .widgetAccentable()
-        .accessibilityLabel(name.isEmpty ? "Rest day" : "Start \(name)")
+        .accessibilityLabel("Start or resume scheduled workout")
         .containerBackground(for: .widget) { AccessoryWidgetBackground() }
     }
 }

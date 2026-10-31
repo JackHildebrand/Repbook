@@ -2,6 +2,24 @@ import XCTest
 @testable import RepbookCore
 
 final class RepbookCoreTests: XCTestCase {
+    func testWidgetUsesAppScheduleAndKeepsLegacyWidgetNames() {
+        var data = RepbookData.seed()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let saturday = calendar.date(from: DateComponents(year: 2026, month: 10, day: 31))!
+        // No app assignment and a blank widget day: explicitly no workout.
+        XCTAssertNil(data.widgetRoutine(named: "", on: saturday, calendar: calendar))
+        XCTAssertEqual(data.widgetRoutine(named: " lower ", on: saturday, calendar: calendar)?.id, data.routines[1].id)
+        data.weekdayRoutines = ["7": data.routines[0].id]
+        data.routines[0].name = "Renamed Upper"
+        // A scheduled routine resolves by ID even if an old widget has no name,
+        // a different name, or the pre-rename name cached in its timeline.
+        for name in ["", "Lower", "Upper"] {
+            XCTAssertEqual(data.widgetRoutine(named: name, on: saturday, calendar: calendar)?.id, data.routines[0].id)
+        }
+        XCTAssertNil(data.widgetRoutine(named: "Not a routine", on: saturday.addingTimeInterval(86400), calendar: calendar))
+    }
+
     func testWeeklyMusclesUseSevenCalendarDaysAndLoggedWorkingSets() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

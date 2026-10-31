@@ -83,6 +83,15 @@ struct RepbookData: Codable, Equatable {
         return routines.first { $0.id == id }
     }
 
+    /// The app's schedule follows routine IDs across renames. Older widgets can
+    /// still supply their own routine name on days without an app assignment.
+    func widgetRoutine(named name: String, on date: Date = .now, calendar: Calendar = .current) -> Routine? {
+        if let routine = scheduledRoutine(on: date, calendar: calendar) { return routine }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return routines.first { $0.name.compare(trimmed, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+    }
+
     static func seed() -> Self {
         let names = ["Bench Press (Barbell)", "Chest Press (Machine)", "Chest Fly (Machine)", "Shoulder Press (Machine)", "Lateral Raise (Machine)", "Lat Pulldown (Cable)", "Seated Row (Machine)", "Wide Grip Seated Row (Machine)", "Neutral Grip Seated Row (Machine)", "Preacher Curl (Machine)", "Bicep Curl (Dumbbell)", "Triceps Pushdown (Cable)", "Squat (Barbell)", "Leg Press (Machine)", "Leg Extension (Machine)", "Seated Leg Curl (Machine)", "Romanian Deadlift (Barbell)", "Calf Extension (Machine)", "Crunch (Machine)", "Back Extension (Machine)", "Hip Adduction (Machine)", "Hip Abduction (Machine)"]
         let exercises = names.map { Exercise(name: $0) }

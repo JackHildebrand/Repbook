@@ -32,24 +32,44 @@ struct StartScheduledWorkoutIntent: LiveActivityIntent {
 
     func perform() async throws -> some IntentResult {
         #if !WIDGET_EXTENSION
-        let names = try JSONDecoder().decode([String].self, from: Data(schedule.utf8))
-        guard names.count == 7 else { throw ScheduledWorkoutError.invalidSchedule }
-        let name = names[Calendar.current.component(.weekday, from: Date()) - 1].trimmingCharacters(in: .whitespacesAndNewlines)
-        try await WorkoutStore.shared.startScheduledRoutine(named: name)
+        do {
+            let names = try JSONDecoder().decode([String].self, from: Data(schedule.utf8))
+            guard names.count == 7 else { throw ScheduledWorkoutError.invalidSchedule }
+            let name = names[Calendar.current.component(.weekday, from: Date()) - 1].trimmingCharacters(in: .whitespacesAndNewlines)
+            try await WorkoutStore.shared.startScheduledRoutine(named: name)
+        } catch {
+            let message = error.localizedDescription
+            // Keep successful starts in the background. A failed launch must offer
+            // a visible recovery path instead of leaving a seemingly dead widget.
+            throw needsToContinueInForegroundError("Open Repbook to continue your workout.") {
+                WorkoutStore.shared.error = message
+                WorkoutStore.shared.notificationSessionID = WorkoutStore.shared.data.active?.id
+                WorkoutStore.shared.scheduleActivityUpdate()
+            }
+        }
+        #else
+        throw ScheduledWorkoutError.openAppRequired
         #endif
         return .result()
     }
 }
 
+#if !WIDGET_EXTENSION
+// This protocol is unavailable to extensions. LiveActivityIntent runs the action
+// in the app process, where foreground continuation is supported (iOS 17+).
+extension StartScheduledWorkoutIntent: ForegroundContinuableIntent {}
+#endif
+
 enum ScheduledWorkoutError: LocalizedError {
-    case invalidSchedule, restDay, missingRoutine, saveFailed, activitiesDisabled
+    case invalidSchedule, restDay, missingRoutine, saveFailed, activitiesDisabled, openAppRequired
     var errorDescription: String? {
         switch self {
         case .invalidSchedule: "Edit this widget to set your weekly schedule."
-        case .restDay: "Today is a rest day. Edit the widget to schedule a routine."
+        case .restDay: "No routine is scheduled for today. Assign one in Home → This week → Edit, or edit this widget’s schedule."
         case .missingRoutine: "No routine matches today's scheduled name. Check the name in Edit Widget against your Repbook routines."
         case .saveFailed: "The workout could not be saved. Open Repbook to check your data."
         case .activitiesDisabled: "Enable Live Activities for Repbook in iPhone Settings before starting from the widget."
+        case .openAppRequired: "Open Repbook to start or resume your workout."
         }
     }
 }
