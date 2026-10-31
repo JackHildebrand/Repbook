@@ -172,7 +172,7 @@ final class WorkoutStore: ObservableObject {
             $0.active!.exercises[ei].sets[si].volumePR = done && records.volume
             $0.active!.lastLoggedSetID = done ? target.id : nil
             let seconds = $0.active!.exercises[ei].restSeconds ?? $0.restSeconds
-            $0.active!.restUntil = done && seconds > 0 ? Date().addingTimeInterval(Double(seconds)) : nil
+            $0.active!.restUntil = done && !target.warmup && seconds > 0 ? Date().addingTimeInterval(Double(seconds)) : nil
         }
         if data.active?.exercises[ei].sets[si].done == true {
             feedback(pr: records.volume)
