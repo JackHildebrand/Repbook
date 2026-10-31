@@ -136,7 +136,7 @@ struct ScheduleSheet: View {
                             ForEach(store.data.routines) { Text($0.name).tag($0.id) }
                         }.tint(day == selectedDay ? .blue : .primary)
                     }
-                } footer: { Text("This weekly schedule repeats. To set a widget’s schedule, hold the widget and choose Edit Widget. Home and widget schedules are configured separately.") }
+                } footer: { Text("This weekly schedule repeats. Widgets use today’s routine from this schedule first. On days without an assignment here, they use the routine set in Edit Widget.") }
             }.navigationTitle("Weekly schedule").navigationBarTitleDisplayMode(.inline)
                 .toolbar { Button("Done") { dismiss() } }
         }.presentationDetents([.large])
