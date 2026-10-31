@@ -1,0 +1,77 @@
+name: Repbook
+options:
+  bundleIdPrefix: com.jackhildebrand
+  deploymentTarget:
+    iOS: '17.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    TARGETED_DEVICE_FAMILY: '1'
+    DEVELOPMENT_TEAM: ''
+    CODE_SIGN_STYLE: Automatic
+targets:
+  Repbook:
+    type: application
+    platform: iOS
+    sources:
+      - Repbook
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jackhildebrand.repbook
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Repbook
+        INFOPLIST_KEY_NSSupportsLiveActivities: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        MARKETING_VERSION: '0.9.0'
+        CURRENT_PROJECT_VERSION: '10'
+    info:
+      path: Repbook/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: com.jackhildebrand.repbook
+            CFBundleURLSchemes: [repbook]
+        NSSupportsLiveActivities: true
+    dependencies:
+      - target: RepbookWidgets
+  RepbookWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widgets
+      - path: Shared/WorkoutActivity.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jackhildebrand.repbook.widgets
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) WIDGET_EXTENSION'
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Repbook
+        MARKETING_VERSION: '0.9.0'
+        CURRENT_PROJECT_VERSION: '10'
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+    info:
+      path: Widgets/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+  RepbookUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jackhildebrand.repbook.uitests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: Repbook
+schemes:
+  Repbook:
+    build:
+      targets:
+        Repbook: all
+    test:
+      targets:
+        - RepbookUITests

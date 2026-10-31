@@ -1,0 +1,61 @@
+name: Native iOS
+on:
+  push:
+    branches: [native-ios, main]
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  pull_request:
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-ios-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test core models and backup migration
+        working-directory: ios
+        run: swift test
+      - name: Install project generator
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Build simulator app and widget extension
+        working-directory: ios
+        run: xcodebuild -project Repbook.xcodeproj -scheme Repbook -sdk iphonesimulator -configuration Debug -derivedDataPath build-simulator CODE_SIGNING_ALLOWED=NO build
+      - name: Test workout logging, navigation and relaunch persistence
+        working-directory: ios
+        run: |
+          SIMULATOR_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for devices in d["devices"].values() for v in devices if v.get("isAvailable") and "iPhone" in v["name"]))')
+          xcodebuild -project Repbook.xcodeproj -scheme Repbook -destination "platform=iOS Simulator,id=$SIMULATOR_ID" -configuration Debug -derivedDataPath build-simulator -resultBundlePath TestResults CODE_SIGNING_ALLOWED=NO test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Repbook-test-results
+          path: ios/TestResults.xcresult
+          if-no-files-found: ignore
+      - name: Build unsigned device app
+        working-directory: ios
+        run: xcodebuild -project Repbook.xcodeproj -scheme Repbook -sdk iphoneos -configuration Release -derivedDataPath build-device CODE_SIGNING_ALLOWED=NO build
+      - name: Package for local signing
+        working-directory: ios
+        run: |
+          mkdir -p Payload
+          cp -R build-device/Build/Products/Release-iphoneos/Repbook.app Payload/
+          zip -r Repbook-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Repbook-unsigned
+          path: ios/Repbook-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Repbook-Xcode-project
+          path: |
+            ios/Repbook.xcodeproj
+            ios/Repbook
+            ios/Shared
+            ios/Widgets
